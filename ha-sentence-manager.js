@@ -4,6 +4,7 @@ class HASentenceManager extends HTMLElement {
     this._hass = null;
     this.config = {};
     this.sentences = [];
+    this._loadData();
     this.currentTab = 'editor';
     this.editingIndex = null;
     // --- Throttle fields ---
@@ -87,6 +88,19 @@ class HASentenceManager extends HTMLElement {
       title: 'Sentence Manager',
       language: 'en',
     };
+  }
+
+  // --- localStorage persistence ---
+  _storageKey() { return 'ha-sentence-manager-data'; }
+  _saveData() {
+    try { localStorage.setItem(this._storageKey(), JSON.stringify(this.sentences)); }
+    catch (e) { console.warn('Sentence Manager: save failed', e); }
+  }
+  _loadData() {
+    try {
+      const raw = localStorage.getItem(this._storageKey());
+      if (raw) this.sentences = JSON.parse(raw);
+    } catch (e) { console.warn('Sentence Manager: load failed', e); }
   }
 
   async loadIntents() {
@@ -177,6 +191,7 @@ class HASentenceManager extends HTMLElement {
 
       if (currentSentence && currentSentence.trigger) imported.push(currentSentence);
       this.sentences = imported;
+      this._saveData();
       this.render();
       this.showNotification('Sentences imported successfully', 'success');
     } catch (error) {
@@ -217,6 +232,7 @@ class HASentenceManager extends HTMLElement {
     } else {
       this.sentences.push(sentence);
     }
+    this._saveData();
 
     this.clearForm();
     this.render();
@@ -260,6 +276,7 @@ class HASentenceManager extends HTMLElement {
   deleteSentence(index) {
     if (confirm('Delete this sentence?')) {
       this.sentences.splice(index, 1);
+      this._saveData();
       this.render();
       this.showNotification('Sentence deleted', 'success');
     }
@@ -1484,7 +1501,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 }
 
-customElements.define('ha-sentence-manager', HASentenceManager);
+if (!customElements.get('ha-sentence-manager')) { customElements.define('ha-sentence-manager', HASentenceManager); };
 
 class HASentenceManagerEditor extends HTMLElement {
   setConfig(config) {
@@ -1571,4 +1588,4 @@ class HASentenceManagerEditor extends HTMLElement {
 
 }
 
-customElements.define('ha-sentence-manager-editor', HASentenceManagerEditor);
+if (!customElements.get('ha-sentence-manager-editor')) { customElements.define('ha-sentence-manager-editor', HASentenceManagerEditor); };
