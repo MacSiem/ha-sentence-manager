@@ -1,5 +1,5 @@
 {
-  "name": "Sentence Manager",
-  "render_readme": true,
-  "content_in_root": true
+    "name":  "Sentence Manager",
+    "filename":  "ha-sentence-manager.js",
+    "render_readme":  true
 }
