@@ -1315,6 +1315,18 @@ textarea { min-height: 80px; resize: vertical; }
 .alert-dismiss:hover { background: var(--bento-error); color: white; border-color: var(--bento-error); }
 
 .section { margin-bottom: 24px; }
+.editor-section, .list-section, .export-section {
+  background: var(--bento-card); border: 1px solid var(--bento-border);
+  border-radius: var(--bento-radius); padding: 20px; margin-bottom: 16px;
+}
+.editor-section h2, .list-section h2, .export-section h2 {
+  font-size: 16px; font-weight: 600; color: var(--bento-text); margin: 0 0 16px 0;
+}
+.preview-slots {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 12px;
+  background: var(--bento-bg); border: 1px solid var(--bento-border);
+  border-radius: var(--bento-radius-sm); margin-top: 8px; min-height: 36px;
+}
 .section h3, .section-title, .pan-head { font-size: 16px; font-weight: 600; color: var(--bento-text); margin-bottom: 12px; letter-spacing: -0.01em; }
 
 .battery-grid, .grid, .items-grid, .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
