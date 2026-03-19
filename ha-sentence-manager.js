@@ -341,7 +341,7 @@ class HASentenceManager extends HTMLElement {
         <button class="tab-button ${this.currentTab === 'export' ? 'active' : ''}" data-tab="export">Import/Export</button>
       </div>
 
-      <div class="tab-content">
+      <div class="tab-content active">
         ${this.renderEditor()}
         ${this.renderList()}
         ${this.renderTest()}
