@@ -5,8 +5,13 @@ class HASentenceManager extends HTMLElement {
     this.config = {};
     this.sentences = [];
     this._loadData();
-    this.currentTab = 'editor';
+    this.currentTab = 'ha-sentences';
     this.editingIndex = null;
+    this._haSentences = null;
+    this._haSentencesLoading = false;
+    this._haSentencesError = null;
+    this._testResultHA = null;
+    this._testLoading = false;
     // --- Throttle fields ---
     this._lastRenderTime = 0;
     this._renderScheduled = false;
@@ -86,7 +91,7 @@ class HASentenceManager extends HTMLElement {
     return {
       type: 'custom:ha-sentence-manager',
       title: 'Sentence Manager',
-      language: 'en',
+      language: 'pl',
     };
   }
 
@@ -108,13 +113,186 @@ class HASentenceManager extends HTMLElement {
     try {
       const result = await this.hass.callWS({
         type: 'assist_pipeline/list_intents',
-        language: this.config.language || 'en',
+        language: this.config.language || 'pl',
       });
       return result.intents || [];
     } catch (e) {
       console.log('Could not load intents from Home Assistant');
       return [];
     }
+  }
+
+  // Load custom sentences from HA config directory
+  async _loadHaSentences() {
+    if (!this._hass || this._haSentencesLoading) return;
+    this._haSentencesLoading = true;
+    this._haSentencesError = null;
+    this.render();
+    try {
+      // Use HA REST API to list custom_sentences directory
+      const token = this._hass.auth.accessToken;
+      const lang = this.config.language || 'pl';
+      // Try fetching known file paths via Supervisor API or direct file read
+      const files = [];
+      // Approach: use HA's /api/config/custom_sentences endpoint if available,
+      // otherwise try to read the file via the config directory listing
+      let yamlContent = null;
+      // Try direct fetch of common paths
+      const paths = [
+        `/api/config/custom_sentences/${lang}`,
+        `/local/custom_sentences/${lang}`,
+      ];
+      // Most reliable: use Supervisor API to read file
+      try {
+        const svResp = await fetch(`/api/supervisor/fs/config/custom_sentences`, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (svResp.ok) {
+          const listing = await svResp.json();
+          files.push(...(listing.data || listing || []));
+        }
+      } catch(e) {}
+      // Try reading known baby.yaml directly
+      const knownFiles = [`custom_sentences/${lang}/baby.yaml`];
+      for (const fp of knownFiles) {
+        try {
+          const resp = await fetch(`/api/supervisor/fs/config/${fp}`, {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          if (resp.ok) {
+            yamlContent = await resp.text();
+          }
+        } catch(e) {}
+      }
+      // If supervisor didn't work, try hassio API
+      if (!yamlContent) {
+        try {
+          const resp = await this._hass.callWS({
+            type: 'supervisor/api',
+            endpoint: `/addons/core_configurator/api/files/custom_sentences/${lang}`,
+            method: 'get'
+          });
+          if (resp) yamlContent = typeof resp === 'string' ? resp : JSON.stringify(resp);
+        } catch(e) {}
+      }
+      // Parse custom_sentences YAML manually (lightweight parser for known structure)
+      if (yamlContent) {
+        this._haSentences = this._parseCustomSentencesYaml(yamlContent);
+      } else {
+        // Fallback: try conversation/process to detect what intents exist
+        this._haSentences = await this._detectIntentsViaConversation();
+      }
+    } catch(e) {
+      this._haSentencesError = e.message;
+      this._haSentences = null;
+    }
+    this._haSentencesLoading = false;
+    this.render();
+  }
+
+  // Parse custom_sentences YAML into structured data
+  _parseCustomSentencesYaml(yaml) {
+    const result = { language: null, intents: {}, lists: {} };
+    const lines = yaml.split('\n');
+    let section = null; // 'intents' or 'lists'
+    let currentIntent = null;
+    let currentList = null;
+    let inSentences = false;
+    let inValues = false;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      // Top-level keys
+      if (line.match(/^language:/)) {
+        result.language = trimmed.replace('language:', '').replace(/['"]/g, '').trim();
+        continue;
+      }
+      if (line.match(/^intents:/)) { section = 'intents'; continue; }
+      if (line.match(/^lists:/)) { section = 'lists'; inSentences = false; continue; }
+      if (section === 'intents') {
+        // Intent name (2-space indent, no dash)
+        const intentMatch = line.match(/^  (\w+):$/);
+        if (intentMatch) {
+          currentIntent = intentMatch[1];
+          result.intents[currentIntent] = [];
+          inSentences = false;
+          continue;
+        }
+        if (trimmed === '- sentences:' || trimmed === 'sentences:') {
+          inSentences = true;
+          continue;
+        }
+        if (trimmed === 'data:') continue;
+        if (inSentences && trimmed.startsWith('- "') && currentIntent) {
+          const sentence = trimmed.replace(/^- /, '').replace(/^"/, '').replace(/"$/, '');
+          result.intents[currentIntent].push(sentence);
+        }
+      }
+      if (section === 'lists') {
+        const listMatch = line.match(/^  (\w+):$/);
+        if (listMatch) {
+          currentList = listMatch[1];
+          result.lists[currentList] = [];
+          inValues = false;
+          continue;
+        }
+        if (trimmed === 'values:') { inValues = true; continue; }
+        if (inValues && currentList) {
+          const inMatch = trimmed.match(/^- in: "(.+)"$/);
+          const simpleMatch = trimmed.match(/^- "(.+)"$/);
+          const outMatch = trimmed.match(/^out: "(.+)"$/);
+          if (inMatch) {
+            result.lists[currentList].push({ in: inMatch[1], out: null });
+          } else if (simpleMatch) {
+            result.lists[currentList].push({ value: simpleMatch[1] });
+          } else if (outMatch && result.lists[currentList].length > 0) {
+            const last = result.lists[currentList][result.lists[currentList].length - 1];
+            if (last && last.out === null) last.out = outMatch[1];
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  // Detect available intents by testing known sentences
+  async _detectIntentsViaConversation() {
+    // We know the structure from the file — parse it from local knowledge
+    // Since we can't read the file via API, show guidance
+    return null;
+  }
+
+  // Test sentence via HA Conversation API
+  async _testSentenceHA(text) {
+    if (!this._hass || !text.trim()) return;
+    this._testLoading = true;
+    this._testResultHA = null;
+    this.render();
+    try {
+      const lang = this.config.language || 'pl';
+      const result = await this._hass.callWS({
+        type: 'conversation/process',
+        text: text.trim(),
+        language: lang,
+        agent_id: 'conversation.home_assistant'
+      });
+      this._testResultHA = {
+        success: true,
+        input: text,
+        response: result?.response?.speech?.plain?.speech || 'No response',
+        responseType: result?.response?.response_type || 'unknown',
+        conversationId: result?.conversation_id,
+        data: result?.response?.data || null
+      };
+    } catch(e) {
+      this._testResultHA = {
+        success: false,
+        input: text,
+        error: e.message
+      };
+    }
+    this._testLoading = false;
+    this.render();
   }
 
   highlightSlots(text) {
@@ -334,14 +512,29 @@ class HASentenceManager extends HTMLElement {
         <h1 class="card-title">${this.config.title || 'Sentence Manager'}</h1>
       </div>
 
+      <div class="tip-banner" id="tip-banner">
+        <button class="tip-dismiss" id="tip-dismiss">\u2715</button>
+        <div class="tip-banner-title">\u{1F4A1} Jak dzia\u0142aj\u0105 komendy g\u0142osowe?</div>
+        <ul>
+          <li><strong>Editor</strong> \u2014 tworzysz zdania (sentences), kt\u00F3re HA rozpoznaje jako komendy g\u0142osowe.</li>
+          <li><strong>Sk\u0142adnia:</strong> u\u017Cyj <code>[opcja1|opcja2]</code> dla alternatyw, <code>{slot_name}</code> dla zmiennych.</li>
+          <li><strong>Intent</strong> \u2014 nazwa akcji (np. TurnOnLight). HA mapuje intent na automatyzacj\u0119.</li>
+          <li><strong>Test</strong> \u2014 testuj zdania w zak\u0142adce Test \u2014 wy\u015Ble tekst do Conversation API.</li>
+          <li><strong>Import/Export</strong> \u2014 eksportuj do YAML, importuj z pliku.</li>
+          <li><strong>Przyk\u0142ad:</strong> <code>[w\u0142\u0105cz|zapal] [\u015Bwiat\u0142o|lamp\u0119] w {room}</code></li>
+        </ul>
+      </div>
+
       <div class="tabs">
-        <button class="tab-button ${this.currentTab === 'editor' ? 'active' : ''}" data-tab="editor">Editor</button>
-        <button class="tab-button ${this.currentTab === 'list' ? 'active' : ''}" data-tab="list">Sentences</button>
-        <button class="tab-button ${this.currentTab === 'test' ? 'active' : ''}" data-tab="test">Test</button>
-        <button class="tab-button ${this.currentTab === 'export' ? 'active' : ''}" data-tab="export">Import/Export</button>
+        <button class="tab-button ${this.currentTab === 'ha-sentences' ? 'active' : ''}" data-tab="ha-sentences">\u{1F3E0} HA Sentences</button>
+        <button class="tab-button ${this.currentTab === 'editor' ? 'active' : ''}" data-tab="editor">\u270F\uFE0F Editor</button>
+        <button class="tab-button ${this.currentTab === 'list' ? 'active' : ''}" data-tab="list">\u{1F4CB} Sentences</button>
+        <button class="tab-button ${this.currentTab === 'test' ? 'active' : ''}" data-tab="test">\u{1F9EA} Test</button>
+        <button class="tab-button ${this.currentTab === 'export' ? 'active' : ''}" data-tab="export">\u{1F4E6} Import/Export</button>
       </div>
 
       <div class="tab-content active">
+        ${this._renderHaSentencesTab()}
         ${this.renderEditor()}
         ${this.renderList()}
         ${this.renderTest()}
@@ -354,6 +547,195 @@ class HASentenceManager extends HTMLElement {
     else this.shadowRoot.appendChild(container);
 
     this.attachEventListeners();
+  }
+
+  _renderHaSentencesTab() {
+    const lang = this.config.language || 'pl';
+    const isActive = this.currentTab === 'ha-sentences';
+
+    // If we have parsed sentences (loaded from file via PowerShell deploy)
+    const haData = this._haSentences;
+
+    let contentHtml = '';
+    if (this._haSentencesLoading) {
+      contentHtml = '<div class="loading-spinner"><div class="spinner"></div> Wczytywanie custom sentences z HA...</div>';
+    } else if (haData && haData.intents && Object.keys(haData.intents).length > 0) {
+      const intents = Object.entries(haData.intents);
+      const totalSentences = intents.reduce((sum, [, arr]) => sum + arr.length, 0);
+      const lists = haData.lists ? Object.entries(haData.lists) : [];
+      contentHtml = `
+        <div class="ha-sentences-summary">
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-value">${intents.length}</div>
+              <div class="stat-label">Intent\u00F3w</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${totalSentences}</div>
+              <div class="stat-label">Zda\u0144</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${lists.length}</div>
+              <div class="stat-label">List</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${haData.language || lang}</div>
+              <div class="stat-label">J\u0119zyk</div>
+            </div>
+          </div>
+        </div>
+        <div class="ha-sentences-detail">
+          <h3>\u{1F4AC} Intenty i zdania</h3>
+          ${intents.map(([name, sentences]) => `
+            <div class="intent-group">
+              <div class="intent-header">
+                <span class="intent-name">${name}</span>
+                <span class="badge badge-info">${sentences.length} zda\u0144</span>
+              </div>
+              <div class="intent-sentences">
+                ${sentences.map(s => `<div class="ha-sentence-item"><code>${this._escapeHtml(s)}</code></div>`).join('')}
+              </div>
+            </div>
+          `).join('')}
+          ${lists.length > 0 ? `
+            <h3 style="margin-top:24px;">\u{1F4D6} Listy slot\u00F3w</h3>
+            ${lists.map(([name, values]) => `
+              <div class="intent-group">
+                <div class="intent-header">
+                  <span class="intent-name">{${name}}</span>
+                  <span class="badge badge-info">${values.length} warto\u015Bci</span>
+                </div>
+                <div class="slot-values">
+                  ${values.map(v => {
+                    if (v.value) return `<span class="slot-badge">${v.value}</span>`;
+                    return `<span class="slot-badge">${v.in} \u2192 ${v.out || ''}</span>`;
+                  }).join(' ')}
+                </div>
+              </div>
+            `).join('')}
+          ` : ''}
+        </div>
+        <div class="ha-sentences-actions" style="margin-top:16px;">
+          <button class="btn btn-primary" id="import-ha-btn">\u{1F4E5} Importuj do edytora</button>
+          <button class="btn btn-secondary" id="reload-ha-btn">\u{1F504} Od\u015Bwie\u017C</button>
+        </div>
+      `;
+    } else {
+      // No data loaded yet or file not found — show info + manual load
+      contentHtml = `
+        <div class="ha-sentences-info">
+          <div class="info-card">
+            <h3>\u{1F4C1} Custom Sentences w Home Assistant</h3>
+            <p>HA przechowuje niestandardowe komendy g\u0142osowe w katalogu <code>config/custom_sentences/${lang}/</code>.</p>
+            <p>Aby wczyta\u0107 zdania z serwera, wklej zawarto\u015B\u0107 pliku YAML poni\u017Cej lub u\u017Cyj przycisku.</p>
+            <div class="file-path-info">
+              <strong>\u{1F4C4} Znana \u015Bcie\u017Cka:</strong> <code>custom_sentences/${lang}/baby.yaml</code>
+            </div>
+          </div>
+          <div class="manual-load" style="margin-top:16px;">
+            <textarea id="ha-yaml-paste" class="yaml-editor" placeholder="Wklej zawarto\u015B\u0107 pliku custom_sentences/${lang}/*.yaml tutaj..."></textarea>
+            <button class="btn btn-primary" id="parse-ha-yaml-btn" style="margin-top:8px;">\u{1F50D} Parsuj YAML</button>
+          </div>
+          <div class="auto-detect" style="margin-top:16px;">
+            <button class="btn btn-secondary" id="detect-ha-btn">\u{1F50E} Wykryj automatycznie (testuj zdania)</button>
+            <p class="hint" style="font-size:12px; color:var(--bento-text-muted); margin-top:4px;">Przetestuje znane frazy przez Conversation API, aby wykry\u0107 dzia\u0142aj\u0105ce intenty.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="tab-panel ${isActive ? 'active' : ''}" data-tab-content="ha-sentences">
+        <div class="ha-sentences-section">
+          <h2>\u{1F3E0} HA Custom Sentences</h2>
+          <p class="section-desc">Niestandardowe komendy g\u0142osowe skonfigurowane w Home Assistant.</p>
+          ${contentHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  _escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Import HA sentences into the editor's local storage
+  _importHaSentencesToEditor() {
+    if (!this._haSentences || !this._haSentences.intents) return;
+    const imported = [];
+    for (const [intentName, sentences] of Object.entries(this._haSentences.intents)) {
+      for (const sentence of sentences) {
+        // Check if already exists
+        const exists = this.sentences.some(s => s.trigger === sentence && s.intent === intentName);
+        if (!exists) {
+          const slotNames = (sentence.match(/\{([^}]+)\}/g) || []).map(s => s.slice(1, -1));
+          const slots = {};
+          slotNames.forEach(name => { slots[name] = 'string'; });
+          imported.push({ trigger: sentence, intent: intentName, slots, response: '' });
+        }
+      }
+    }
+    if (imported.length > 0) {
+      this.sentences.push(...imported);
+      this._saveData();
+      this.showNotification(`Zaimportowano ${imported.length} zda\u0144 z HA`, 'success');
+    } else {
+      this.showNotification('Wszystkie zdania ju\u017C istniej\u0105 w edytorze', 'info');
+    }
+    this.render();
+  }
+
+  // Auto-detect intents by testing known phrases
+  async _autoDetectIntents() {
+    if (!this._hass) return;
+    this._haSentencesLoading = true;
+    this.render();
+    const testPhrases = [
+      { text: 'zaczynam karmi\u0107 lew\u0105 piersi\u0105', expectedIntent: 'BreastfeedingStart' },
+      { text: 'sko\u0144czy\u0142am karmi\u0107', expectedIntent: 'BreastfeedingEnd' },
+      { text: 'ile czasu ju\u017C karmi\u0119', expectedIntent: 'BreastfeedingElapsed' },
+      { text: 'kiedy ostatnie karmienie', expectedIntent: 'BreastfeedingLast' },
+      { text: 'zaczynam karmi\u0107 butelk\u0105', expectedIntent: 'BottleFeedingStart' },
+      { text: 'sko\u0144czy\u0142am karmi\u0107 butelk\u0105', expectedIntent: 'BottleFeedingEnd' },
+      { text: 'zmieni\u0142em pieluch\u0119', expectedIntent: 'DiaperAdd' },
+      { text: 'ile dzi\u015B pieluch', expectedIntent: 'DiaperTodayCount' },
+      { text: 'zaczynam odci\u0105ganie mleka', expectedIntent: 'PumpStart' },
+      { text: 'sko\u0144czy\u0142am odci\u0105ganie', expectedIntent: 'PumpEnd' },
+    ];
+    const detected = {};
+    const lang = this.config.language || 'pl';
+    for (const phrase of testPhrases) {
+      try {
+        const result = await this._hass.callWS({
+          type: 'conversation/process',
+          text: phrase.text,
+          language: lang,
+          agent_id: 'conversation.home_assistant'
+        });
+        const respType = result?.response?.response_type;
+        const speech = result?.response?.speech?.plain?.speech || '';
+        if (respType === 'action_done' || respType === 'query_answer') {
+          if (!detected[phrase.expectedIntent]) detected[phrase.expectedIntent] = [];
+          detected[phrase.expectedIntent].push({ sentence: phrase.text, response: speech });
+        }
+      } catch(e) { /* skip */ }
+    }
+    if (Object.keys(detected).length > 0) {
+      this._haSentences = {
+        language: lang,
+        intents: {},
+        lists: {},
+        _detectedViaAPI: true
+      };
+      for (const [intent, items] of Object.entries(detected)) {
+        this._haSentences.intents[intent] = items.map(i => i.sentence);
+      }
+      this.showNotification(`Wykryto ${Object.keys(detected).length} dzia\u0142aj\u0105cych intent\u00F3w!`, 'success');
+    } else {
+      this._haSentencesError = 'Nie wykryto \u017Cadnych custom intent\u00F3w.';
+    }
+    this._haSentencesLoading = false;
+    this.render();
   }
 
   renderEditor() {
@@ -436,13 +818,47 @@ class HASentenceManager extends HTMLElement {
   }
 
   renderTest() {
+    const haResult = this._testResultHA;
+    let haResultHtml = '';
+    if (this._testLoading) {
+      haResultHtml = '<div class="loading-spinner"><div class="spinner"></div> Testowanie przez HA Conversation API...</div>';
+    } else if (haResult) {
+      if (haResult.success) {
+        const isMatch = haResult.responseType === 'action_done' || haResult.responseType === 'query_answer';
+        haResultHtml = `
+          <div class="ha-test-result ${isMatch ? 'test-match' : 'test-no-match'}">
+            <div class="result-header">
+              <span class="badge ${isMatch ? 'badge-success' : 'badge-warning'}">${isMatch ? '\u2705 Rozpoznano' : '\u26A0\uFE0F Brak dopasowania'}</span>
+              <span class="result-type">${haResult.responseType}</span>
+            </div>
+            <div class="result-input"><strong>Wej\u015Bcie:</strong> ${this._escapeHtml(haResult.input)}</div>
+            <div class="result-response"><strong>Odpowied\u017A HA:</strong> ${this._escapeHtml(haResult.response)}</div>
+          </div>
+        `;
+      } else {
+        haResultHtml = `<div class="ha-test-result test-error"><strong>B\u0142\u0105d:</strong> ${this._escapeHtml(haResult.error)}</div>`;
+      }
+    }
     return `
       <div class="tab-panel ${this.currentTab === 'test' ? 'active' : ''}" data-tab-content="test">
         <div class="test-section">
-          <h2>Test Sentence Matching</h2>
-          <input type="text" id="test-input" placeholder="Type a sentence to test..." class="test-input">
-          <button class="btn btn-primary" id="test-btn">Test</button>
-          <div id="test-results" class="test-results"></div>
+          <h2>\u{1F9EA} Test Sentence</h2>
+          <p class="section-desc">Testuj zdania bezpo\u015Brednio przez Home Assistant Conversation API.</p>
+          <div class="test-input-row">
+            <input type="text" id="test-input" placeholder="Wpisz komend\u0119 g\u0142osow\u0105, np. zaczynam karmi\u0107 lew\u0105 piersi\u0105..." class="test-input" style="flex:1;">
+            <button class="btn btn-primary" id="test-ha-btn">\u{1F3E0} Test HA</button>
+            <button class="btn btn-secondary" id="test-btn">\u{1F50D} Test lokalny</button>
+          </div>
+          <div class="quick-test-phrases" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">
+            <span style="font-size:12px; color:var(--bento-text-muted); margin-right:4px;">Szybki test:</span>
+            <button class="btn btn-small quick-test-btn" data-phrase="zaczynam karmi\u0107 lew\u0105 piersi\u0105">karmi\u0107 piersi\u0105</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="zmieni\u0142em pieluch\u0119 mokra">pielucha</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="zaczynam karmi\u0107 butelk\u0105">butelka</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="zaczynam odci\u0105ganie mleka">odci\u0105ganie</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="ile dzi\u015B pieluch">ile pieluch</button>
+          </div>
+          ${haResultHtml}
+          <div id="test-results" class="test-results" style="margin-top:12px;"></div>
         </div>
       </div>
     `;
@@ -486,6 +902,22 @@ class HASentenceManager extends HTMLElement {
   }
 
   attachEventListeners() {
+    // Tip banner dismiss
+    const _tipB = this.shadowRoot.querySelector('#tip-banner');
+    if (_tipB) {
+      const _tipV = 'sentence-manager-tips-v3.0.0';
+      if (localStorage.getItem(_tipV) === 'dismissed') {
+        _tipB.classList.add('hidden');
+      }
+      const _tipDismiss = this.shadowRoot.querySelector('#tip-dismiss');
+      if (_tipDismiss) {
+        _tipDismiss.addEventListener('click', (e) => {
+          e.stopPropagation();
+          _tipB.classList.add('hidden');
+          localStorage.setItem(_tipV, 'dismissed');
+        });
+      }
+    }
     // Tab switching
     this.shadowRoot.querySelectorAll('.tab-button').forEach(btn => {
       btn.addEventListener('click', e => {
@@ -514,11 +946,41 @@ class HASentenceManager extends HTMLElement {
       btn.addEventListener('click', e => this.deleteSentence(parseInt(e.target.dataset.delete)));
     });
 
-    // Test
+    // Test - HA Conversation API
+    this.shadowRoot.querySelector('#test-ha-btn')?.addEventListener('click', () => {
+      const input = this.shadowRoot.querySelector('#test-input')?.value;
+      if (input && input.trim()) this._testSentenceHA(input);
+    });
+    // Test - Local matching
     this.shadowRoot.querySelector('#test-btn')?.addEventListener('click', () => {
       const input = this.shadowRoot.querySelector('#test-input').value;
       const results = this.testSentenceMatching(input);
       this.displayTestResults(results, input);
+    });
+    // Quick test phrases
+    this.shadowRoot.querySelectorAll('.quick-test-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const phrase = e.target.dataset.phrase;
+        const input = this.shadowRoot.querySelector('#test-input');
+        if (input) input.value = phrase;
+        this._testSentenceHA(phrase);
+      });
+    });
+    // HA Sentences tab buttons
+    this.shadowRoot.querySelector('#import-ha-btn')?.addEventListener('click', () => this._importHaSentencesToEditor());
+    this.shadowRoot.querySelector('#reload-ha-btn')?.addEventListener('click', () => this._loadHaSentences());
+    this.shadowRoot.querySelector('#detect-ha-btn')?.addEventListener('click', () => this._autoDetectIntents());
+    this.shadowRoot.querySelector('#parse-ha-yaml-btn')?.addEventListener('click', () => {
+      const yaml = this.shadowRoot.querySelector('#ha-yaml-paste')?.value;
+      if (yaml && yaml.trim()) {
+        this._haSentences = this._parseCustomSentencesYaml(yaml);
+        if (this._haSentences && Object.keys(this._haSentences.intents).length > 0) {
+          this.showNotification('YAML sparsowany pomy\u015Blnie!', 'success');
+        } else {
+          this.showNotification('Nie znaleziono intent\u00F3w w YAML', 'error');
+        }
+        this.render();
+      }
     });
 
     // Export/Import
@@ -595,25 +1057,6 @@ class HASentenceManager extends HTMLElement {
   --bento-shadow-lg: 0 8px 25px rgba(0,0,0,0.06), 0 4px 10px rgba(0,0,0,0.04);
   --bento-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :host {
-    --bento-bg: #1a1a2e;
-    --bento-card: #16213e;
-    --bento-text: #e2e8f0;
-    --bento-text-secondary: #94a3b8;
-    --bento-border: #334155;
-    --bento-success: #34d399;
-    --bento-warning: #fbbf24;
-    --bento-error: #f87171;
-  }
-}
-:host-context([data-themes]) {
-  --bento-bg: var(--lovelace-background, var(--primary-background-color, #F8FAFC));
-  --bento-card: var(--card-background-color, var(--ha-card-background, #FFFFFF));
-  --bento-text: var(--primary-text-color, #1E293B);
-  --bento-text-secondary: var(--secondary-text-color, #64748B);
-  --bento-border: var(--divider-color, #E2E8F0);
 }
 
 /* Card */
@@ -793,6 +1236,37 @@ canvas {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bento-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--bento-text-muted); }
+
+/* ===== HA Sentences Tab ===== */
+.ha-sentences-section { padding: 16px; }
+.section-desc { font-size: 13px; color: var(--bento-text-secondary); margin-bottom: 16px; }
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.ha-sentences-detail { margin-top: 16px; }
+.intent-group { background: var(--bento-bg); border: 1px solid var(--bento-border); border-radius: var(--bento-radius-sm); padding: 12px; margin-bottom: 10px; }
+.intent-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.intent-name { font-weight: 600; font-size: 14px; color: var(--bento-primary); }
+.intent-sentences { display: flex; flex-direction: column; gap: 4px; }
+.ha-sentence-item { padding: 4px 8px; background: var(--bento-card); border-radius: var(--bento-radius-xs); border: 1px solid var(--bento-border); }
+.ha-sentence-item code { font-size: 12px; color: var(--bento-text); word-break: break-all; }
+.slot-values { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
+.slot-badge { padding: 3px 8px; background: var(--bento-primary-light); color: var(--bento-primary); border-radius: 12px; font-size: 11px; font-weight: 500; }
+.info-card { background: var(--bento-primary-light); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--bento-radius-sm); padding: 16px; }
+.info-card h3 { margin-top: 0; }
+.file-path-info { margin-top: 8px; padding: 8px; background: var(--bento-card); border-radius: var(--bento-radius-xs); font-size: 13px; }
+.hint { font-size: 12px; color: var(--bento-text-muted); }
+.test-input-row { display: flex; gap: 8px; align-items: center; }
+.ha-test-result { padding: 12px; border-radius: var(--bento-radius-sm); margin-top: 12px; }
+.ha-test-result.test-match { background: var(--bento-success-light); border: 1px solid rgba(16, 185, 129, 0.3); }
+.ha-test-result.test-no-match { background: var(--bento-warning-light); border: 1px solid rgba(245, 158, 11, 0.3); }
+.ha-test-result.test-error { background: var(--bento-error-light); border: 1px solid rgba(239, 68, 68, 0.3); }
+.result-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.result-type { font-size: 12px; color: var(--bento-text-muted); }
+.result-input, .result-response { font-size: 13px; margin: 4px 0; }
+.loading-spinner { display: flex; align-items: center; gap: 8px; padding: 20px; color: var(--bento-text-secondary); }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--bento-border); border-top-color: var(--bento-primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.quick-test-btn { padding: 3px 8px !important; font-size: 11px !important; background: var(--bento-bg) !important; border: 1px solid var(--bento-border) !important; color: var(--bento-text-secondary) !important; }
+.quick-test-btn:hover { background: var(--bento-primary-light) !important; color: var(--bento-primary) !important; }
 
 /* ===== END BENTO LIGHT MODE ===== */
 
@@ -1247,7 +1721,7 @@ canvas {
   --bento-shadow-md: 0 4px 12px rgba(0,0,0,0.06);
   --bento-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: block;
-  color-scheme: light dark;
+  color-scheme: light !important;
 }
 * { box-sizing: border-box; }
 
@@ -1527,6 +2001,28 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   .column { min-width: unset; }
 }
 
+
+/* Tips banner */
+.tip-banner {
+  background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(59,130,246,0.03));
+  border: 1.5px solid rgba(59,130,246,0.2);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  position: relative;
+}
+.tip-banner-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: #3B82F6; }
+.tip-banner ul { margin: 6px 0 0 16px; padding: 0; }
+.tip-banner li { margin-bottom: 3px; }
+.tip-banner .tip-dismiss {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; color: var(--secondary-text-color, #888); opacity: 0.6;
+}
+.tip-banner .tip-dismiss:hover { opacity: 1; }
+.tip-banner.hidden { display: none; }
 </style>
     `;
   }
