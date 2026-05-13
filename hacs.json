@@ -1,7 +1,6 @@
 {
-  "name": "Sentence Manager",
-  "filename": "ha-sentence-manager.js",
+  "name": "HA Sentence Manager",
   "render_readme": true,
-  "content_in_root": true,
-  "homeassistant": "2024.1.0"
+  "homeassistant": "2024.1.0",
+  "country": ["PL", "GB", "US", "DE"]
 }

@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Sentence Manager",
+        "description": "This will register the HA Sentence Manager integration. Custom voice sentences will be stored in your Home Assistant config under custom_sentences/<language>/."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance of this integration is allowed."
+    }
+  }
+}
