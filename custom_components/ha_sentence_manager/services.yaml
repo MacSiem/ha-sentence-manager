@@ -1,0 +1,7 @@
+reload:
+  name: Reload sentences
+  description: >-
+    Tell the conversation integration to reload custom sentence YAML files.
+    The integration calls this automatically after every create / update /
+    delete; this service is exposed so it can also be triggered manually
+    (for example after editing a YAML file by hand).

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "HA Sentence Manager",
-        "description": "Spowoduje to zarejestrowanie integracji HA Sentence Manager. Niestandardowe zdania głosowe będą zapisywane w katalogu Home Assistant pod custom_sentences/<język>/."
+        "description": "Spowoduje to zarejestrowanie integracji HA Sentence Manager. Niestandardowe zdania głosowe będą zapisywane w katalogu Home Assistant pod custom_sentences w folderze odpowiednim dla danego języka."
       }
     },
     "abort": {

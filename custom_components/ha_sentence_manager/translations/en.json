@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "HA Sentence Manager",
-        "description": "This will register the HA Sentence Manager integration. Custom voice sentences will be stored in your Home Assistant config under custom_sentences/<language>/."
+        "description": "This will register the HA Sentence Manager integration. Custom voice sentences will be stored in your Home Assistant config under the custom_sentences language directory."
       }
     },
     "abort": {
