@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Sentence Manager",
+        "description": "Spowoduje to zarejestrowanie integracji HA Sentence Manager. Niestandardowe zdania głosowe będą zapisywane w katalogu Home Assistant pod custom_sentences/<język>/."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Dozwolona jest tylko jedna instancja tej integracji."
+    }
+  }
+}

@@ -1,24 +1,25 @@
-# Changelog — Sentence Manager
+# Changelog
 
-## [4.1.3] - 2026-05-12
+## 5.0.0 — 2026-05-13
 
-### Fixed
-- Removed Google Fonts CDN @import (1 occurrence(s)); now uses system font stack with Inter as the preferred locally-installed face.
-- Normalized bare `font-family: "Inter", sans-serif` declarations to a complete cross-platform system stack.
-- Privacy section in README: claim now matches behaviour (no CDN dependencies).
+**Breaking architectural rewrite.** The card no longer stores sentences in browser `localStorage`. Persistence is now handled by a bundled Python integration that writes sentences as YAML into Home Assistant's official `custom_sentences/<language>/` directory.
 
-All notable changes to **Sentence Manager** are documented here.
+### Added
+- `custom_components/ha_sentence_manager/` Python integration with `config_flow` setup.
+- WebSocket API: `ha_sentence_manager/list`, `/create`, `/update`, `/delete`, `/reload`.
+- Multi-language storage: each sentence is written to `custom_sentences/<lang>/ha_sentence_manager_<intent>.yaml`.
+- Automatic `conversation.reload` after every create / update / delete.
 
-## [4.0.0] - 2026-05-10
+### Removed
+- Browser `localStorage` persistence for sentences (all CRUD now goes through the integration's WS API).
+- False README claim about `frontend/set_user_data` cross-device persistence (the API was never used and is not the right API for application data anyway).
+- Google Fonts CDN imports for Inter / JetBrains Mono. The card now uses the system font stack (`-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, etc.), so it makes no external network calls.
 
-### Major
-- **Split from `MacSiem/ha-tools` monorepo** into a dedicated standalone HACS plugin.
-- Bundled Bento Design System CSS inline — no shared dependency required.
-- Inlined `_haToolsEsc` XSS sanitizer.
-- Persistence keys migrated to per-tool namespace `ha-sentence-manager-…` (clean break — old data under `ha-tools-…` is **not** migrated automatically).
-- Donation/support footer added to the panel.
-- Cross-tool discovery banner removed; each tool stands on its own.
+### Migration
+- Existing 4.x browser-saved sentences are **not** auto-migrated. Use 4.x's "Export YAML" tab before upgrading if you need to keep them.
 
-### Compatibility
+## 4.0.0 — 2026-05-10
+- HA Tools monorepo split — sentence manager extracted into its own HACS-installable repo.
 
-- Home Assistant ≥ 2024.1.0
+## 3.x and earlier
+- Pre-split history available in the original `MacSiem/ha-tools` repository.

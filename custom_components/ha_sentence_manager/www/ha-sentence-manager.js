@@ -1,12 +1,13 @@
-/* HA Tools split — ha-sentence-manager v4.1.3 (2026-05-12) — single-tool standalone repo */
+/* HA Tools split — ha-sentence-manager v5.0.0 (2026-05-13) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
 // XSS protection helper (reuse global from panel, fallback for standalone)
 const _esc = window._haToolsEsc || ((s) => typeof s === 'string' ? s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]) : (s ?? ''));
 
-// -- HA Tools Persistence (stub -- full impl in ha-tools-panel.js) --
-window._haToolsPersistence = window._haToolsPersistence || { _cache: {}, _hass: null, setHass(h) { this._hass = h; }, async save(k, d) { try { localStorage.setItem('ha-sentence-manager-' + k, JSON.stringify(d)); } catch(e) { console.debug('[ha-sentence-manager] caught:', e); } }, async load(k) { try { const r = localStorage.getItem('ha-sentence-manager-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } }, loadSync(k) { try { const r = localStorage.getItem('ha-sentence-manager-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } } };
+// v5.0: removed unused `_haToolsPersistence` localStorage stub.
+// Persistent application data lives in HA's `custom_sentences/<lang>/` files,
+// managed by the bundled Python integration over the WebSocket API.
 
 
 /* ===== HA Tools split — inline shared infrastructure ===== */
@@ -17,7 +18,7 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
    HA Tools — Bento Design System v2.0 (Premium)
    ═══════════════════════════════════════════════ */
 
-
+/* fonts: system stack — no CDN */
 :host {
   /* Brand palette — diamond top, gradient-friendly */
   --bento-primary: #6366f1;
@@ -76,7 +77,7 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
   --bento-trans-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Typography */
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   font-feature-settings: "cv11" 1, "ss01" 1;
   letter-spacing: -0.01em;
   display: block;
@@ -142,7 +143,7 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
   border-radius: var(--bento-radius-md);
   box-shadow: var(--bento-shadow-md);
   color: var(--bento-text);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   position: relative;
   transition: box-shadow var(--bento-trans), border-color var(--bento-trans);
 }
@@ -182,7 +183,7 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
   padding: 8px 16px !important;
   border: none !important; background: transparent !important; cursor: pointer !important;
   font-size: 13px !important; font-weight: 600 !important;
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, system-ui, sans-serif !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif !important;
   color: var(--bento-text-secondary) !important;
   border-radius: var(--bento-radius-pill) !important;
   margin-bottom: 0 !important;
@@ -293,7 +294,7 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
   border-radius: var(--bento-radius-pill); padding: 6px 14px;
   font-size: 12px; color: var(--bento-text-secondary);
   cursor: pointer; font-weight: 600; transition: all var(--bento-trans);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
 }
 .refresh-btn:hover {
   background: var(--bento-card); color: var(--bento-primary);
@@ -304,7 +305,7 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
   background: var(--bento-grad-primary); border: none;
   border-radius: var(--bento-radius-xs); padding: 8px 16px;
   font-size: 13px; color: #fff; cursor: pointer; font-weight: 600;
-  transition: all var(--bento-trans); font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, system-ui, sans-serif;
+  transition: all var(--bento-trans); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   letter-spacing: -0.005em;
   box-shadow: 0 4px 12px -2px var(--bento-primary-glow);
 }
@@ -317,7 +318,7 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
   background: var(--bento-grad-primary); color: #fff;
   border: none; border-radius: var(--bento-radius-sm);
   padding: 12px 20px; font-size: 14px; font-weight: 700;
-  cursor: pointer; font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, system-ui, sans-serif;
+  cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   letter-spacing: -0.01em;
   transition: all var(--bento-trans);
   box-shadow: 0 4px 14px -2px var(--bento-primary-glow);
@@ -376,7 +377,7 @@ input, select, textarea {
   padding: 10px 14px; border: 1.5px solid var(--bento-border);
   border-radius: var(--bento-radius-xs);
   background: var(--bento-card); color: var(--bento-text);
-  font-size: 14px; font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, system-ui, sans-serif;
+  font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   transition: all var(--bento-trans); outline: none;
   letter-spacing: -0.005em;
 }
@@ -390,7 +391,7 @@ input::placeholder, textarea::placeholder { color: var(--bento-text-muted); }
 code {
   background: var(--bento-bg-2); padding: 2px 6px;
   border-radius: 4px; font-size: 12px;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Cascadia Code", "Liberation Mono", monospace;
   border: 1px solid var(--bento-border);
 }
 pre {
@@ -398,7 +399,7 @@ pre {
   padding: 16px; border-radius: var(--bento-radius-sm);
   font-size: 12.5px; overflow-x: auto; line-height: 1.65;
   white-space: pre-wrap; word-break: break-word;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "Cascadia Code", "Liberation Mono", monospace;
   box-shadow: var(--bento-shadow-md);
 }
 
@@ -426,7 +427,7 @@ pre {
 }
 .error-entry { background: var(--bento-error-light); border-color: var(--bento-error-border); }
 .warn-entry  { background: var(--bento-warning-light); border-color: var(--bento-warning-border); }
-.log-time { color: var(--bento-text-muted); font-feature-settings: "tnum" 1; flex-shrink: 0; font-family: "JetBrains Mono", monospace; }
+.log-time { color: var(--bento-text-muted); font-feature-settings: "tnum" 1; flex-shrink: 0; font-family: ui-monospace, SFMono-Regular, Menlo, "Cascadia Code", "Liberation Mono", monospace; }
 .log-domain {
   font-weight: 700; flex-shrink: 1; min-width: 0; max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; word-break: break-all;
@@ -626,14 +627,14 @@ if (typeof window !== 'undefined' && !window.__haToolsSplitDonateInjector) {
           var hasOwnTip = el.shadowRoot.querySelector('#tip-banner, .tip-banner');
           var injectedIntro = el.shadowRoot.querySelector('.intro-banner[data-intro="' + tag + '"]');
           if (!hasOwnTip && !injectedIntro) {
-            try {
-              var _introTmp = document.createElement('div');
-              _introTmp.innerHTML = buildIntroBanner(tag, intro);
-              var _introNode = _introTmp.firstElementChild;
-              if (_introNode) el.shadowRoot.insertBefore(_introNode, el.shadowRoot.firstChild);
-              var btn = el.shadowRoot.querySelector('.intro-banner[data-intro="' + tag + '"] .intro-dismiss');
-              if (btn) btn.addEventListener('click', function(ev){ ev.stopPropagation(); dismissIntro(tag, el); });
-            } catch(e) {}
+            var topCard = el.shadowRoot.querySelector('.card, .card-container, .main-card, [class$="-card"]') || el.shadowRoot.firstElementChild;
+            if (topCard) {
+              try {
+                topCard.insertAdjacentHTML('afterbegin', buildIntroBanner(tag, intro));
+                var btn = el.shadowRoot.querySelector('.intro-banner[data-intro="' + tag + '"] .intro-dismiss');
+                if (btn) btn.addEventListener('click', function(ev){ ev.stopPropagation(); dismissIntro(tag, el); });
+              } catch(e) {}
+            }
           }
         }
         // 1) Prereq banner — checked every poll so it disappears when prereq becomes available
@@ -646,12 +647,8 @@ if (typeof window !== 'undefined' && !window.__haToolsSplitDonateInjector) {
           var existing = el.shadowRoot.querySelector('.prereq-banner[data-prereq="' + tag + '"]');
           if (!present && hassReady) {
             if (!existing) {
-              try {
-                var _prereqTmp = document.createElement('div');
-                _prereqTmp.innerHTML = buildPrereqBanner(tag, prereq, el._hass);
-                var _prereqNode = _prereqTmp.firstElementChild;
-                if (_prereqNode) el.shadowRoot.insertBefore(_prereqNode, el.shadowRoot.firstChild);
-              } catch(e) {}
+              var top = el.shadowRoot.querySelector('.card, .card-container, .main-card, [class$="-card"]') || el.shadowRoot.firstElementChild || el.shadowRoot;
+              try { top.insertAdjacentHTML('afterbegin', buildPrereqBanner(tag, prereq, el._hass)); } catch(e) {}
             }
           } else if (present && existing) {
             existing.remove();
@@ -659,11 +656,8 @@ if (typeof window !== 'undefined' && !window.__haToolsSplitDonateInjector) {
         }
         // 2) Donate footer
         if (el.shadowRoot.querySelector('.donate-section')) return;
-        try {
-          var _donateTmp = document.createElement('div');
-          _donateTmp.innerHTML = DONATE_HTML;
-          while (_donateTmp.firstChild) el.shadowRoot.appendChild(_donateTmp.firstChild);
-        } catch(e) {}
+        var target = el.shadowRoot.querySelector('.card, .card-container, .main-card, [class$="-card"]') || el.shadowRoot.firstElementChild || el.shadowRoot;
+        try { target.insertAdjacentHTML('beforeend', DONATE_HTML); } catch(e) {}
       });
     });
   }
@@ -702,10 +696,13 @@ class HASentenceManager extends HTMLElement {
     this._lang = (navigator.language || '').startsWith('pl') ? 'pl' : 'en';
     this._hass = null;
     this.config = {};
-    this.sentences = [];
-    this._loadData();
+    this.sentences = [];           // populated from integration WS API once `hass` is set
+    this._sentencesLoaded = false; // becomes true after the first _reloadFromApi()
+    this._currentLanguage = null;  // user-selected filter (null = show all languages)
+    this._apiError = null;
     this.currentTab = 'ha-sentences';
-    this.editingIndex = null;
+    this.editingId = null;
+    this.editingIndex = null;      // legacy index alias still used by a few helpers
     this._haSentences = null;
     this._haSentencesLoading = false;
     this._haSentencesError = null;
@@ -759,6 +756,11 @@ class HASentenceManager extends HTMLElement {
     if (hass?.language) this._lang = hass.language.startsWith('pl') ? 'pl' : 'en';    const prevHass = this._hass;
     this._hass = hass;
     if (!hass) return;
+    if (!this._sentencesLoaded) {
+      // Load persisted sentences from the integration once HA is connected.
+      this._sentencesLoaded = true;
+      this._reloadFromApi();
+    }
     if (!this._firstHassRender) {
       this._firstHassRender = true;
       this.render();
@@ -836,12 +838,11 @@ class HASentenceManager extends HTMLElement {
         testDirectly: 'Testuj zdania bezpośrednio przez Home Assistant Conversation API.',
         enterVoiceCommand: 'Wpisz komendę głosową...',
         quickTest: 'Szybki test:',
-        breastfeedLeft: 'karmiać piersią lewą',
-        breastfeedEnd: 'koniec karmienia',
-        diaperWet: 'zmieniono pieluchę mokra',
-        bottleFeeding: 'karmiać butelką',
-        pumping: 'odciąganie mleka',
-        diaperCount: 'ile pieluch',
+        quickTestLight: 'światło',
+        quickTestTemp: 'temperatura',
+        quickTestBlinds: 'rolety',
+        quickTestWeather: 'pogoda',
+        quickTestAllOff: 'wszystkie wył',
         yamlParsedSuccess: 'YAML sparsowany pomyślnie!',
         noIntentsFound: 'Nie znaleziono intentów w YAML',
         loadingCustomSentences: 'Wczytywanie custom sentences z HA...',
@@ -908,12 +909,11 @@ class HASentenceManager extends HTMLElement {
         testDirectly: 'Test sentences directly via Home Assistant Conversation API.',
         enterVoiceCommand: 'Enter voice command...',
         quickTest: 'Quick test:',
-        breastfeedLeft: 'start breastfeeding left breast',
-        breastfeedEnd: 'end breastfeeding',
-        diaperWet: 'changed wet diaper',
-        bottleFeeding: 'bottle feeding',
-        pumping: 'pumping',
-        diaperCount: 'diaper count today',
+        quickTestLight: 'light on',
+        quickTestTemp: 'temperature',
+        quickTestBlinds: 'blinds',
+        quickTestWeather: 'weather',
+        quickTestAllOff: 'all off',
         yamlParsedSuccess: 'YAML parsed successfully!',
         noIntentsFound: 'No intents found in YAML',
         loadingCustomSentences: 'Loading custom sentences from HA...',
@@ -943,95 +943,102 @@ class HASentenceManager extends HTMLElement {
     };
   }
 
-  // --- localStorage persistence ---
-  _storageKey() { return 'ha-sentence-manager-data'; }
-  _saveData() {
-    try { localStorage.setItem(this._storageKey(), JSON.stringify(this.sentences)); }
-    catch (e) { console.warn('Sentence Manager: save failed', e); }
-  }
-  _loadData() {
+  // --- ha_sentence_manager integration WS API ---
+  // Sentences live in HA's `custom_sentences/<lang>/ha_sentence_manager_<intent>.yaml`.
+  // No browser localStorage for application data: every create/update/delete
+  // round-trips through the companion Python integration, which is the source of truth.
+  async _apiList(language = null) {
+    if (!this._hass) return [];
     try {
-      const raw = localStorage.getItem(this._storageKey());
-      if (raw) this.sentences = JSON.parse(raw);
-    } catch (e) { console.warn('Sentence Manager: load failed', e); }
-  }
-
-  async loadIntents() {
-    if (!this.hass) return [];
-    try {
-      const result = await this.hass.callWS({
-        type: 'assist_pipeline/list_intents',
-        language: this.config.language || 'pl',
-      });
-      return result.intents || [];
+      const msg = { type: 'ha_sentence_manager/list' };
+      if (language) msg.language = language;
+      return await this._hass.callWS(msg);
     } catch (e) {
-      console.log('Could not load intents from Home Assistant');
+      console.warn('[ha-sentence-manager] list failed', e);
+      this._apiError = e && e.message ? e.message : String(e);
       return [];
     }
   }
+  async _apiCreate(payload) {
+    if (!this._hass) throw new Error('Home Assistant connection not ready');
+    return await this._hass.callWS({ type: 'ha_sentence_manager/create', ...payload });
+  }
+  async _apiUpdate(sentence_id, patch) {
+    if (!this._hass) throw new Error('Home Assistant connection not ready');
+    return await this._hass.callWS({ type: 'ha_sentence_manager/update', sentence_id, patch });
+  }
+  async _apiDelete(sentence_id) {
+    if (!this._hass) throw new Error('Home Assistant connection not ready');
+    return await this._hass.callWS({ type: 'ha_sentence_manager/delete', sentence_id });
+  }
+  async _apiReload() {
+    if (!this._hass) return;
+    try { await this._hass.callWS({ type: 'ha_sentence_manager/reload' }); }
+    catch (e) { console.warn('[ha-sentence-manager] reload failed', e); }
+  }
+  async _reloadFromApi() {
+    // Map server entries → card row model. Server returns
+    //   {id, language, intent, sentences:[...], slots, response}
+    // The card UI works on a single trigger phrase per row; when a server entry
+    // contains multiple sentences (e.g. hand-edited YAML), the first one is
+    // shown as `trigger` and the full list is preserved as `_allSentences`
+    // so subsequent edits don't silently drop sibling phrases.
+    const items = await this._apiList(this._currentLanguage || null);
+    this.sentences = items.map(item => ({
+      id: item.id,
+      language: item.language,
+      intent: item.intent,
+      trigger: (item.sentences && item.sentences[0]) || '',
+      slots: item.slots || {},
+      response: item.response || '',
+      _allSentences: Array.isArray(item.sentences) ? item.sentences.slice() : [],
+    }));
+    this.render();
+  }
+  _integrationMissingHint() {
+    return this._lang === 'pl'
+      ? 'Brak integracji ha_sentence_manager — zainstaluj ją z HACS i dodaj w Ustawienia → Urządzenia i usługi.'
+      : 'The ha_sentence_manager integration is missing. Install it from HACS and add it under Settings → Devices & services.';
+  }
 
-  // Load custom sentences from HA config directory
+  // v5: HA core does not expose a WS command to enumerate registered
+  // intents — `assist_pipeline/list_intents` was never a real endpoint
+  // (cf. core/homeassistant/components/assist_pipeline/websocket_api.py).
+  // Surface a curated catalogue of built-in HA Assist intents as
+  // suggestions for the "create sentence" form; the actual stored
+  // sentences are always sourced from the integration via _apiList().
+  loadIntents() {
+    return [
+      'HassTurnOn', 'HassTurnOff', 'HassLightSet', 'HassClimateSetTemperature',
+      'HassClimateGetTemperature', 'HassWeatherGet', 'HassListAddItem',
+      'HassListCompleteItem', 'HassMediaPause', 'HassMediaUnpause',
+      'HassMediaNext', 'HassMediaPrevious', 'HassSetVolume', 'HassCancel',
+      'HassNevermind', 'HassRespond', 'HassGetState', 'HassShoppingListAddItem',
+      'HassVacuumStart', 'HassTimerStart', 'HassTimerCancel', 'HassTimerStatus',
+    ];
+  }
+
+  // v5: the integration is the source of truth for custom_sentences files,
+  // so this just re-reads from the integration's WS API and reshapes the
+  // flat list into the {intents:{name:[sentences]}} structure the HA
+  // Sentences tab renderer already understands. No browser-side file
+  // reads, no Supervisor/REST endpoint guessing, no side-effects.
   async _loadHaSentences() {
     if (!this._hass || this._haSentencesLoading) return;
     this._haSentencesLoading = true;
     this._haSentencesError = null;
     this.render();
     try {
-      // Use HA REST API to list custom_sentences directory
-      const token = this._hass.auth.accessToken;
-      const lang = this.config.language || 'pl';
-      // Try fetching known file paths via Supervisor API or direct file read
-      const files = [];
-      // Approach: use HA's /api/config/custom_sentences endpoint if available,
-      // otherwise try to read the file via the config directory listing
-      let yamlContent = null;
-      // Try direct fetch of common paths
-      const paths = [
-        `/api/config/custom_sentences/${lang}`,
-        `/local/custom_sentences/${lang}`,
-      ];
-      // Most reliable: use Supervisor API to read file
-      try {
-        const svResp = await fetch(`/api/supervisor/fs/config/custom_sentences`, {
-          headers: { 'Authorization': 'Bearer ' + token }
-        });
-        if (svResp.ok) {
-          const listing = await svResp.json();
-          files.push(...(listing.data || listing || []));
-        }
-      } catch(e) { console.debug('[ha-sentence-manager] caught:', e); }
-      // Try reading known baby.yaml directly
-      const knownFiles = [`custom_sentences/${lang}/baby.yaml`];
-      for (const fp of knownFiles) {
-        try {
-          const resp = await fetch(`/api/supervisor/fs/config/${fp}`, {
-            headers: { 'Authorization': 'Bearer ' + token }
-          });
-          if (resp.ok) {
-            yamlContent = await resp.text();
-          }
-        } catch(e) { console.debug('[ha-sentence-manager] caught:', e); }
+      const items = await this._apiList(null);
+      const grouped = { language: this.config.language || null, intents: {}, lists: {} };
+      for (const item of (items || [])) {
+        const key = item.intent || 'Unknown';
+        if (!grouped.intents[key]) grouped.intents[key] = [];
+        for (const s of (item.sentences || [])) grouped.intents[key].push(s);
       }
-      // If supervisor didn't work, try hassio API
-      if (!yamlContent) {
-        try {
-          const resp = await this._hass.callWS({
-            type: 'supervisor/api',
-            endpoint: `/addons/core_configurator/api/files/custom_sentences/${lang}`,
-            method: 'get'
-          });
-          if (resp) yamlContent = typeof resp === 'string' ? resp : JSON.stringify(resp);
-        } catch(e) { console.debug('[ha-sentence-manager] caught:', e); }
-      }
-      // Parse custom_sentences YAML manually (lightweight parser for known structure)
-      if (yamlContent) {
-        this._haSentences = this._parseCustomSentencesYaml(yamlContent);
-      } else {
-        // Fallback: try conversation/process to detect what intents exist
-        this._haSentences = await this._detectIntentsViaConversation();
-      }
-    } catch(e) {
-      this._haSentencesError = e.message;
+      this._haSentences = Object.keys(grouped.intents).length ? grouped : null;
+    } catch (e) {
+      this._haSentencesError = e && e.message ? e.message : String(e);
       this._haSentences = null;
     }
     this._haSentencesLoading = false;
@@ -1104,12 +1111,6 @@ class HASentenceManager extends HTMLElement {
   }
 
   // Detect available intents by testing known sentences
-  async _detectIntentsViaConversation() {
-    // We know the structure from the file — parse it from local knowledge
-    // Since we can't read the file via API, show guidance
-    return null;
-  }
-
   // Test sentence via HA Conversation API
   async _testSentenceHA(text) {
     if (!this._hass || !text.trim()) return;
@@ -1192,7 +1193,7 @@ class HASentenceManager extends HTMLElement {
     return yaml;
   }
 
-  importFromYaml(yamlText) {
+  async importFromYaml(yamlText) {
     try {
       const lines = yamlText.split('\n');
       const imported = [];
@@ -1217,12 +1218,31 @@ class HASentenceManager extends HTMLElement {
       });
 
       if (currentSentence && currentSentence.trigger) imported.push(currentSentence);
-      this.sentences = imported;
-      this._saveData();
-      this.render();
-      this.showNotification('Sentences imported successfully', 'success');
+      if (imported.length === 0) {
+        this.showNotification(this._lang === 'pl' ? 'Brak rozpoznanych zdań w YAML' : 'No sentences recognized in YAML', 'info');
+        return;
+      }
+      const language = (this._currentLanguage || this._hass?.config?.language || 'en');
+      let created = 0;
+      for (const item of imported) {
+        try {
+          await this._apiCreate({
+            language,
+            intent: item.intent || 'CustomIntent',
+            sentences: [item.trigger],
+            slots: item.slots || {},
+            response: item.response || '',
+          });
+          created++;
+        } catch (e) {
+          console.warn('[ha-sentence-manager] import row failed', e, item);
+        }
+      }
+      await this._reloadFromApi();
+      await this._apiReload();
+      this.showNotification(this._lang === 'pl' ? `Zaimportowano ${created} zdań` : `Imported ${created} sentences`, 'success');
     } catch (error) {
-      this.showNotification('Error importing YAML', 'error');
+      this.showNotification(this._lang === 'pl' ? 'Błąd importu YAML' : 'Error importing YAML', 'error');
     }
   }
 
@@ -1234,13 +1254,13 @@ class HASentenceManager extends HTMLElement {
     setTimeout(() => notification.remove(), 3000);
   }
 
-  saveSentence() {
+  async saveSentence() {
     const trigger = this.shadowRoot.querySelector('#trigger-input').value.trim();
     const intent = this.shadowRoot.querySelector('#intent-input').value.trim();
     const response = this.shadowRoot.querySelector('#response-input').value.trim();
 
     if (!trigger || !intent) {
-      this.showNotification('Trigger and intent are required', 'error');
+      this.showNotification(this._lang === 'pl' ? 'Trigger i intent są wymagane' : 'Trigger and intent are required', 'error');
       return;
     }
 
@@ -1251,19 +1271,41 @@ class HASentenceManager extends HTMLElement {
       if (name) slots[name] = type;
     });
 
-    const sentence = { trigger, intent, slots, response };
+    const language = (this._currentLanguage || this._hass?.config?.language || 'en');
 
-    if (this.editingIndex !== null) {
-      this.sentences[this.editingIndex] = sentence;
-      this.editingIndex = null;
-    } else {
-      this.sentences.push(sentence);
+    try {
+      if (this.editingId !== null) {
+        // Update: replace this row's trigger but keep sibling sentences if any.
+        const existing = this.sentences.find(s => s.id === this.editingId);
+        const all = existing ? existing._allSentences.slice() : [];
+        if (all.length === 0) all.push(trigger);
+        else all[0] = trigger; // first phrase is the canonical one in v5.0 UI
+        await this._apiUpdate(this.editingId, {
+          sentences: all,
+          slots,
+          response,
+        });
+      } else {
+        await this._apiCreate({
+          language,
+          intent,
+          sentences: [trigger],
+          slots,
+          response,
+        });
+      }
+    } catch (e) {
+      console.warn('[ha-sentence-manager] saveSentence failed', e);
+      this.showNotification(`${this._lang === 'pl' ? 'Zapis nie powiódł się' : 'Save failed'}: ${e.message || e}`, 'error');
+      return;
     }
-    this._saveData();
 
+    this.editingId = null;
+    this.editingIndex = null;
     this.clearForm();
-    this.render();
-    this.showNotification('Sentence saved', 'success');
+    await this._reloadFromApi();
+    await this._apiReload();
+    this.showNotification(this._lang === 'pl' ? 'Zdanie zapisane' : 'Sentence saved', 'success');
   }
 
   clearForm() {
@@ -1271,19 +1313,29 @@ class HASentenceManager extends HTMLElement {
     this.shadowRoot.querySelector('#intent-input').value = '';
     this.shadowRoot.querySelector('#response-input').value = '';
     this.shadowRoot.querySelector('#slots-container').innerHTML = '';
+    this.editingId = null;
     this.editingIndex = null;
   }
 
-  editSentence(index) {
-    const sentence = this.sentences[index];
-    this.editingIndex = index;
+  editSentence(indexOrId) {
+    // Accept either a numeric index (legacy onClick code) or a sentence id.
+    let sentence;
+    if (typeof indexOrId === 'number') {
+      sentence = this.sentences[indexOrId];
+      this.editingIndex = indexOrId;
+    } else {
+      sentence = this.sentences.find(s => s.id === indexOrId);
+      this.editingIndex = this.sentences.indexOf(sentence);
+    }
+    if (!sentence) return;
+    this.editingId = sentence.id;
     this.shadowRoot.querySelector('#trigger-input').value = sentence.trigger;
     this.shadowRoot.querySelector('#intent-input').value = sentence.intent;
     this.shadowRoot.querySelector('#response-input').value = sentence.response || '';
 
     const slotsContainer = this.shadowRoot.querySelector('#slots-container');
     slotsContainer.innerHTML = '';
-    Object.entries(sentence.slots).forEach(([name, type]) => {
+    Object.entries(sentence.slots || {}).forEach(([name, type]) => {
       const slotElement = document.createElement('div');
       slotElement.className = 'slot-item';
       slotElement.innerHTML = `
@@ -1300,13 +1352,23 @@ class HASentenceManager extends HTMLElement {
     window.scrollTo(0, 0);
   }
 
-  deleteSentence(index) {
-    if (confirm('Delete this sentence?')) {
-      this.sentences.splice(index, 1);
-      this._saveData();
-      this.render();
-      this.showNotification('Sentence deleted', 'success');
+  async deleteSentence(indexOrId) {
+    let sentence;
+    if (typeof indexOrId === 'number') sentence = this.sentences[indexOrId];
+    else sentence = this.sentences.find(s => s.id === indexOrId);
+    if (!sentence) return;
+    const promptText = this._lang === 'pl' ? 'Usunąć to zdanie?' : 'Delete this sentence?';
+    if (!confirm(promptText)) return;
+    try {
+      await this._apiDelete(sentence.id);
+    } catch (e) {
+      console.warn('[ha-sentence-manager] deleteSentence failed', e);
+      this.showNotification(`${this._lang === 'pl' ? 'Usuwanie nie powiodło się' : 'Delete failed'}: ${e.message || e}`, 'error');
+      return;
     }
+    await this._reloadFromApi();
+    await this._apiReload();
+    this.showNotification(this._lang === 'pl' ? 'Zdanie usunięte' : 'Sentence deleted', 'success');
   }
 
   addSlotToForm() {
@@ -1575,6 +1637,17 @@ class HASentenceManager extends HTMLElement {
 
           </div>
         
+        <!-- Support / Donation -->
+        <div class="donate-section" data-source="ha-tools-split">
+          <div class="donate-text">
+            <h3>❤️ ${this._lang === 'pl' ? 'Wesprzyj rozwój HA Tools' : 'Support HA Tools Development'}</h3>
+            <p>${this._lang === 'pl' ? 'Jeśli to narzędzie ułatwia Ci życie z Home Assistant, rozważ wsparcie projektu. Każda kawa motywuje do dalszego rozwoju!' : 'If this tool makes your Home Assistant life easier, consider supporting the project. Every coffee motivates further development!'}</p>
+          </div>
+          <div class="donate-buttons">
+            <a class="donate-btn coffee" href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">☕ Buy Me a Coffee</a>
+            <a class="donate-btn paypal" href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">💳 PayPal</a>
+          </div>
+        </div>
         </div>
       `;
     }
@@ -1608,94 +1681,58 @@ class HASentenceManager extends HTMLElement {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  // Import HA sentences into the editor's local storage
-  _importHaSentencesToEditor() {
+  // Import HA's existing custom-sentence definitions into the integration store
+  async _importHaSentencesToEditor() {
     if (!this._haSentences || !this._haSentences.intents) return;
-    const imported = [];
+    const language = (this._currentLanguage || this._hass?.config?.language || 'en');
+    const toCreate = [];
     for (const [intentName, sentences] of Object.entries(this._haSentences.intents)) {
       for (const sentence of sentences) {
-        // Check if already exists
         const exists = this.sentences.some(s => s.trigger === sentence && s.intent === intentName);
         if (!exists) {
           const slotNames = (sentence.match(/\{([^}]+)\}/g) || []).map(s => s.slice(1, -1));
           const slots = {};
           slotNames.forEach(name => { slots[name] = 'string'; });
-          imported.push({ trigger: sentence, intent: intentName, slots, response: '' });
+          toCreate.push({ trigger: sentence, intent: intentName, slots, response: '' });
         }
       }
     }
-    if (imported.length > 0) {
-      this.sentences.push(...imported);
-      this._saveData();
-      this.showNotification(this._lang === 'pl' ? `Zaimportowano ${imported.length} zdań z HA` : `Imported ${imported.length} sentences from HA`, 'success');
-    } else {
+    if (toCreate.length === 0) {
       this.showNotification(this._lang === 'pl' ? 'Wszystkie zdania już istnieją w edytorze' : 'All sentences already exist in editor', 'info');
+      this.render();
+      return;
     }
-    this.render();
+    let created = 0;
+    for (const item of toCreate) {
+      try {
+        await this._apiCreate({
+          language,
+          intent: item.intent,
+          sentences: [item.trigger],
+          slots: item.slots,
+          response: item.response || '',
+        });
+        created++;
+      } catch (e) {
+        console.warn('[ha-sentence-manager] HA-import row failed', e, item);
+      }
+    }
+    await this._reloadFromApi();
+    await this._apiReload();
+    this.showNotification(this._lang === 'pl' ? `Zaimportowano ${created} zdań z HA` : `Imported ${created} sentences from HA`, 'success');
   }
 
-  // Auto-detect intents by testing known phrases
+  // v5: the v4 "auto-detect" path fired real `conversation/process`
+  // requests with hardcoded sentences ("start breastfeeding", "changed
+  // diaper", …) just to enumerate which intents were registered. That
+  // triggered real automations as a side effect of opening a tab —
+  // exactly the discovery side-effect anti-pattern the HACS reviewer
+  // rejected v1 for (PR #6256). v5 reads the integration's storage
+  // instead — it's the canonical "what's persisted right now" answer
+  // and is side-effect-free.
   async _autoDetectIntents() {
     if (!this._hass) return;
-    this._haSentencesLoading = true;
-    this.render();
-    const lang = this.config.language || 'pl';
-    const testPhrases = lang === 'pl' ? [
-      { text: 'zaczynam karmiać lewą piersią', expectedIntent: 'BreastfeedingStart' },
-      { text: 'skończyłam karmiać', expectedIntent: 'BreastfeedingEnd' },
-      { text: 'ile czasu już karmię', expectedIntent: 'BreastfeedingElapsed' },
-      { text: 'kiedy ostatnie karmienie', expectedIntent: 'BreastfeedingLast' },
-      { text: 'zaczynam karmiać butelką', expectedIntent: 'BottleFeedingStart' },
-      { text: 'skończyłam karmiać butelką', expectedIntent: 'BottleFeedingEnd' },
-      { text: 'zmieniłem pieluchę', expectedIntent: 'DiaperAdd' },
-      { text: 'ile dziś pieluch', expectedIntent: 'DiaperTodayCount' },
-      { text: 'zaczynam odciąganie mleka', expectedIntent: 'PumpStart' },
-      { text: 'skończyłam odciąganie', expectedIntent: 'PumpEnd' },
-    ] : [
-      { text: 'start breastfeeding left breast', expectedIntent: 'BreastfeedingStart' },
-      { text: 'finished breastfeeding', expectedIntent: 'BreastfeedingEnd' },
-      { text: 'how long breastfeeding', expectedIntent: 'BreastfeedingElapsed' },
-      { text: 'when last feeding', expectedIntent: 'BreastfeedingLast' },
-      { text: 'start bottle feeding', expectedIntent: 'BottleFeedingStart' },
-      { text: 'finished bottle feeding', expectedIntent: 'BottleFeedingEnd' },
-      { text: 'changed diaper', expectedIntent: 'DiaperAdd' },
-      { text: 'diaper count today', expectedIntent: 'DiaperTodayCount' },
-      { text: 'start pumping', expectedIntent: 'PumpStart' },
-      { text: 'finished pumping', expectedIntent: 'PumpEnd' },
-    ];
-    const detected = {};
-    for (const phrase of testPhrases) {
-      try {
-        const result = await this._hass.callWS({
-          type: 'conversation/process',
-          text: phrase.text,
-          language: lang,
-          agent_id: 'conversation.home_assistant'
-        });
-        const respType = result?.response?.response_type;
-        const speech = result?.response?.speech?.plain?.speech || '';
-        if (respType === 'action_done' || respType === 'query_answer') {
-          if (!detected[phrase.expectedIntent]) detected[phrase.expectedIntent] = [];
-          detected[phrase.expectedIntent].push({ sentence: phrase.text, response: speech });
-        }
-      } catch(e) { /* skip */ }
-    }
-    if (Object.keys(detected).length > 0) {
-      this._haSentences = {
-        language: lang,
-        intents: {},
-        lists: {},
-        _detectedViaAPI: true
-      };
-      for (const [intent, items] of Object.entries(detected)) {
-        this._haSentences.intents[intent] = items.map(i => i.sentence);
-      }
-      this.showNotification(this._lang === 'pl' ? `Wykryto ${Object.keys(detected).length} działających intentów!` : `Detected ${Object.keys(detected).length} working intents!`, 'success');
-    } else {
-      this._haSentencesError = this._lang === 'pl' ? 'Nie wykryto żadnych custom intentów.' : 'No custom intents detected.';
-    }
-    this._haSentencesLoading = false;
-    this.render();
+    await this._loadHaSentences();
   }
 
   renderEditor() {
@@ -1814,17 +1851,17 @@ class HASentenceManager extends HTMLElement {
           <h2>🧪 ${this._lang === 'pl' ? 'Test Sentence' : 'Test Sentence'}</h2>
           <p class="section-desc">${this._lang === 'pl' ? 'Testuj zdania bezpośrednio przez Home Assistant Conversation API.' : 'Test sentences directly via Home Assistant Conversation API.'}</p>
           <div class="test-input-row">
-            <input type="text" id="test-input" placeholder="${this._lang === 'pl' ? 'Wpisz komendę głosową, np. zaczynam karmiać lewą piersią...' : 'Enter voice command, e.g. start breastfeeding left breast...'}" class="test-input" style="flex:1;">
+            <input type="text" id="test-input" placeholder="${this._lang === 'pl' ? 'Wpisz komendę głosową, np. włącz światło w salonie...' : 'Enter voice command, e.g. turn on the living room light...'}" class="test-input" style="flex:1;">
             <button class="btn btn-primary" id="test-ha-btn">🏠 ${this._lang === 'pl' ? 'Test HA' : 'Test HA'}</button>
             <button class="btn btn-secondary" id="test-btn">🔍 ${this._lang === 'pl' ? 'Test lokalny' : 'Test local'}</button>
           </div>
           <div class="quick-test-phrases" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">
             <span style="font-size:12px; color:var(--bento-text-muted); margin-right:4px;">${this._lang === 'pl' ? 'Szybki test:' : 'Quick test:'}</span>
-            <button class="btn btn-small quick-test-btn" data-phrase="zaczynam karmiać lewą piersią">${this._lang === 'pl' ? 'karmiać piersią' : 'left breast'}</button>
-            <button class="btn btn-small quick-test-btn" data-phrase="zmieniono pieluchę mokra">${this._lang === 'pl' ? 'pielucha' : 'diaper'}</button>
-            <button class="btn btn-small quick-test-btn" data-phrase="zaczynam karmiać butelką">${this._lang === 'pl' ? 'butelka' : 'bottle'}</button>
-            <button class="btn btn-small quick-test-btn" data-phrase="zaczynam odciąganie mleka">${this._lang === 'pl' ? 'odciąganie' : 'pumping'}</button>
-            <button class="btn btn-small quick-test-btn" data-phrase="ile dziś pieluch">${this._lang === 'pl' ? 'ile pieluch' : 'diaper count'}</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'włącz światło w salonie' : 'turn on the living room light'}">${this._lang === 'pl' ? 'światło' : 'light on'}</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'jaka jest temperatura na zewnątrz' : 'what is the outside temperature'}">${this._lang === 'pl' ? 'temperatura' : 'temperature'}</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'zamknij rolety w sypialni' : 'close the bedroom blinds'}">${this._lang === 'pl' ? 'rolety' : 'blinds'}</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'jaka jest pogoda' : 'what is the weather'}">${this._lang === 'pl' ? 'pogoda' : 'weather'}</button>
+            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'wyłącz wszystkie światła' : 'turn off all lights'}">${this._lang === 'pl' ? 'wszystkie wył' : 'all off'}</button>
           </div>
           ${haResultHtml}
           <div id="test-results" class="test-results" style="margin-top:12px;"></div>
@@ -2066,7 +2103,7 @@ class HASentenceManager extends HTMLElement {
 /* === HA Tools split — premium banners (donate / intro / prereq) === */
 
 /* Donation footer — diamond top */
-.donate-section {  margin: 24px 0 4px; padding: 20px 24px; position: relative; overflow: hidden;  background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(236,72,153,0.06));  border: 1px solid rgba(99,102,241,0.18); border-radius: var(--bento-radius-md, 18px);  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px;  font-family: 'Inter', -apple-system, sans-serif;}
+.donate-section {  margin: 24px 0 4px; padding: 20px 24px; position: relative; overflow: hidden;  background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(236,72,153,0.06));  border: 1px solid rgba(99,102,241,0.18); border-radius: var(--bento-radius-md, 18px);  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px;  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;}
 .donate-section::before {  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);}
 .donate-section .donate-text { flex: 1; min-width: 240px; }
 .donate-section h3 {  margin: 0 0 6px; font-size: 16px; font-weight: 700; letter-spacing: -0.02em;  background: linear-gradient(135deg, #6366f1, #ec4899);  -webkit-background-clip: text; background-clip: text; color: transparent;}
@@ -2082,7 +2119,7 @@ class HASentenceManager extends HTMLElement {
 @media (max-width: 600px) {  .donate-section { flex-direction: column; text-align: center; padding: 18px; }  .donate-buttons { justify-content: center; width: 100%; } }
 
 /* Prereq banner — premium */
-.prereq-banner {  display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px;  border-radius: var(--bento-radius-sm, 12px); margin: 0 0 16px;  font-size: 13px; line-height: 1.55; border: 1px solid;  font-family: 'Inter', sans-serif; letter-spacing: -0.005em;  position: relative; overflow: hidden;}
+.prereq-banner {  display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px;  border-radius: var(--bento-radius-sm, 12px); margin: 0 0 16px;  font-size: 13px; line-height: 1.55; border: 1px solid;  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; letter-spacing: -0.005em;  position: relative; overflow: hidden;}
 .prereq-banner::before {  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;}
 .prereq-banner.prereq-error { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.25); color: #991b1b; }
 .prereq-banner.prereq-error::before { background: linear-gradient(180deg, #ef4444, #f87171); }
@@ -2091,19 +2128,19 @@ class HASentenceManager extends HTMLElement {
 .prereq-banner .prereq-icon { font-size: 22px; line-height: 1; padding-top: 2px; flex-shrink: 0; }
 .prereq-banner .prereq-text { flex: 1; min-width: 0; }
 .prereq-banner .prereq-text strong { font-weight: 700; letter-spacing: -0.01em; }
-.prereq-banner code {  background: rgba(0,0,0,0.06); padding: 1px 7px; border-radius: 5px;  font-size: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace;  border: 1px solid rgba(0,0,0,0.08);}
+.prereq-banner code {  background: rgba(0,0,0,0.06); padding: 1px 7px; border-radius: 5px;  font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, "Cascadia Code", "Liberation Mono", monospace;  border: 1px solid rgba(0,0,0,0.08);}
 .prereq-banner .prereq-cta {  display: inline-flex; align-items: center; padding: 8px 16px; border-radius: 10px;  background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff !important;  text-decoration: none; font-weight: 700; font-size: 12.5px; flex-shrink: 0;  letter-spacing: -0.005em;  box-shadow: 0 4px 14px -2px rgba(99,102,241,0.45);  transition: all 0.2s cubic-bezier(0.4,0,0.2,1);}
 .prereq-banner .prereq-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 24px -4px rgba(99,102,241,0.6); }
 @media (prefers-color-scheme: dark) {  .prereq-banner.prereq-error { background: rgba(248,113,113,0.10); border-color: rgba(248,113,113,0.30); color: #fca5a5; }  .prereq-banner.prereq-info  { background: rgba(129,140,248,0.10); border-color: rgba(129,140,248,0.30); color: #c7d2fe; }  .prereq-banner code { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.10); } }
 @media (max-width: 600px) {  .prereq-banner { flex-direction: column; align-items: stretch; padding-left: 20px; }  .prereq-banner .prereq-cta { align-self: flex-start; } }
 
 /* First-run intro banner — premium */
-.intro-banner {  position: relative; padding: 18px 52px 18px 22px; margin: 0 0 18px;  background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(236,72,153,0.06));  border: 1px solid rgba(99,102,241,0.20);  border-radius: var(--bento-radius-sm, 12px);  font-size: 13px; line-height: 1.55; overflow: hidden;  font-family: 'Inter', sans-serif; letter-spacing: -0.005em;  animation: bentoSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);}
+.intro-banner {  position: relative; padding: 18px 52px 18px 22px; margin: 0 0 18px;  background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(236,72,153,0.06));  border: 1px solid rgba(99,102,241,0.20);  border-radius: var(--bento-radius-sm, 12px);  font-size: 13px; line-height: 1.55; overflow: hidden;  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; letter-spacing: -0.005em;  animation: bentoSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);}
 .intro-banner::before {  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);}
 .intro-banner .intro-headline {  font-weight: 700; font-size: 14.5px; margin-bottom: 10px; letter-spacing: -0.02em;  background: linear-gradient(135deg, #6366f1, #ec4899);  -webkit-background-clip: text; background-clip: text; color: transparent;  display: flex; align-items: center; gap: 8px;}
 .intro-banner .intro-steps {  margin: 8px 0 0; padding: 0; list-style: none; counter-reset: introstep;}
 .intro-banner .intro-steps li {  margin-bottom: 8px; line-height: 1.55; color: var(--bento-text, #0c0a09);  padding-left: 32px; position: relative; counter-increment: introstep;  font-size: 12.5px;}
-.intro-banner .intro-steps li::before {  content: counter(introstep); position: absolute; left: 0; top: -1px;  width: 22px; height: 22px; border-radius: 50%;  background: var(--bento-card, #fff); border: 1px solid rgba(99,102,241,0.25);  display: flex; align-items: center; justify-content: center;  font-size: 11px; font-weight: 800; color: #6366f1;  font-family: 'JetBrains Mono', ui-monospace, monospace;  font-feature-settings: 'tnum' 1;}
+.intro-banner .intro-steps li::before {  content: counter(introstep); position: absolute; left: 0; top: -1px;  width: 22px; height: 22px; border-radius: 50%;  background: var(--bento-card, #fff); border: 1px solid rgba(99,102,241,0.25);  display: flex; align-items: center; justify-content: center;  font-size: 11px; font-weight: 800; color: #6366f1;  font-family: ui-monospace, SFMono-Regular, Menlo, "Cascadia Code", "Liberation Mono", monospace;  font-feature-settings: 'tnum' 1;}
 .intro-banner .intro-dismiss {  position: absolute; top: 12px; right: 14px;  background: var(--bento-card, transparent); border: 1px solid var(--bento-border, transparent);  cursor: pointer; font-size: 14px; line-height: 1;  color: var(--bento-text-secondary, #64748B);  padding: 4px 8px; border-radius: 999px;  transition: all 0.15s ease;}
 .intro-banner .intro-dismiss:hover {  background: var(--bento-bg-2, #e7e5e4); color: var(--bento-text, #0c0a09);  transform: rotate(90deg);}
 @media (prefers-color-scheme: dark) {  .intro-banner { background: linear-gradient(135deg, rgba(129,140,248,0.14), rgba(244,114,182,0.10)); border-color: rgba(129,140,248,0.30); }  .intro-banner .intro-headline { background: linear-gradient(135deg, #a5b4fc, #f9a8d4); -webkit-background-clip: text; background-clip: text; color: transparent; }  .intro-banner .intro-steps li { color: #fafaf9; }  .intro-banner .intro-steps li::before { background: #16161f; border-color: rgba(129,140,248,0.35); color: #a5b4fc; }  .intro-banner .intro-dismiss { background: #16161f; border-color: #27272f; color: #d6d3d1; }  .intro-banner .intro-dismiss:hover { background: #27272f; color: #fafaf9; } }
@@ -2134,7 +2171,7 @@ class HASentenceManager extends HTMLElement {
   --bento-shadow-md: 0 4px 12px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.04);
   --bento-shadow-lg: 0 8px 25px rgba(0,0,0,0.06), 0 4px 10px rgba(0,0,0,0.04);
   --bento-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
 }
 
 /* Card */
@@ -2143,7 +2180,7 @@ class HASentenceManager extends HTMLElement {
   border: 1px solid var(--bento-border) !important;
   border-radius: var(--bento-radius-md) !important;
   box-shadow: var(--bento-shadow-sm) !important;
-  font-family: 'Inter', sans-serif !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif !important;
   color: var(--bento-text) !important;
   overflow: hidden;
   position: relative;
@@ -2153,7 +2190,7 @@ class HASentenceManager extends HTMLElement {
 /* Headers */
 .card-header, .header, .card-title, h1, h2, h3 {
   color: var(--bento-text) !important;
-  font-family: 'Inter', sans-serif !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif !important;
 }
 .card-header, .header {
   border-bottom: 1px solid var(--bento-border) !important;
@@ -2177,7 +2214,7 @@ class HASentenceManager extends HTMLElement {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   color: var(--bento-text-secondary);
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
@@ -2203,7 +2240,7 @@ class HASentenceManager extends HTMLElement {
 
 /* Buttons */
 button, .btn, .action-btn {
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   font-size: 13px;
   font-weight: 500;
   border-radius: var(--bento-radius-xs);
@@ -2223,7 +2260,7 @@ button.active, .btn.active, .btn-primary, .action-btn.active {
   border-radius: 20px;
   font-size: 11px;
   font-weight: 600;
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -2233,7 +2270,7 @@ button.active, .btn.active, .btn-primary, .action-btn.active {
 .badge-info, .status-info { background: var(--bento-primary-light); color: var(--bento-primary); }
 
 /* Tables */
-table { width: 100%; border-collapse: separate; border-spacing: 0; font-family: 'Inter', sans-serif; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 th { background: var(--bento-bg); color: var(--bento-text-secondary); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--bento-border); }
 td { padding: 12px 14px; border-bottom: 1px solid var(--bento-border); color: var(--bento-text); font-size: 13px; }
 tr:hover td { background: var(--bento-primary-light); }
@@ -2241,7 +2278,7 @@ tr:last-child td { border-bottom: none; }
 
 /* Inputs & selects */
 input, select, textarea {
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   font-size: 13px;
   padding: 8px 12px;
   border: 1.5px solid var(--bento-border);
@@ -2265,7 +2302,7 @@ input:focus, select:focus, textarea:focus {
   transition: var(--bento-transition);
 }
 .stat-card:hover, .stat:hover, .metric-card:hover { box-shadow: var(--bento-shadow-md); transform: translateY(-1px); }
-.stat-value, .metric-value, .stat-number { font-size: 28px; font-weight: 700; color: var(--bento-text); font-family: 'Inter', sans-serif; }
+.stat-value, .metric-value, .stat-number { font-size: 28px; font-weight: 700; color: var(--bento-text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .stat-label, .metric-label, .stat-title { font-size: 12px; font-weight: 500; color: var(--bento-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
 
 /* Canvas override (prevent Bento CSS from distorting charts) */
@@ -2295,13 +2332,13 @@ canvas {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   transition: var(--bento-transition);
 }
 .pagination-btn:hover:not(:disabled), .pag-btn:hover:not(:disabled) { background: var(--bento-primary); color: white; border-color: var(--bento-primary); }
 .pagination-btn:disabled, .pag-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .pagination-info, .pag-info { font-size: 13px; color: var(--bento-text-secondary); font-weight: 500; padding: 0 8px; }
-.page-size-select { padding: 6px 10px; border: 1.5px solid var(--bento-border); border-radius: var(--bento-radius-xs); font-size: 12px; font-family: 'Inter', sans-serif; }
+.page-size-select { padding: 6px 10px; border: 1.5px solid var(--bento-border); border-radius: var(--bento-radius-xs); font-size: 12px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 
 /* Empty state */
 .empty-state, .no-data, .no-results {
@@ -2820,7 +2857,7 @@ canvas {
 
 .card, .card-container, .reports-card, .export-card {
   background: var(--bento-card); border-radius: var(--bento-radius-sm); box-shadow: var(--bento-shadow-sm);
-  padding: 28px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  padding: 28px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   color: var(--bento-text); border: 1px solid var(--bento-border); animation: fadeSlideIn 0.4s ease-out;
 }
 .card-header { font-size: 20px; font-weight: 700; margin-bottom: 20px; color: var(--bento-text); letter-spacing: -0.01em; display: flex; justify-content: space-between; align-items: center; }
@@ -2828,26 +2865,26 @@ canvas {
 .card-title, .title, .header-title, .pan-title { font-size: 20px; font-weight: 700; color: var(--bento-text); letter-spacing: -0.01em; }
 .header, .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 4px; border-bottom: 2px solid var(--bento-border); margin-bottom: 24px; padding-bottom: 0; }
-.tab, .tab-btn, .tab-btn { padding: 8px 14px; border: none; background: transparent; color: var(--bento-text-secondary); cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: var(--bento-transition); white-space: nowrap; margin-bottom: -2px; border-radius: 8px 8px 0 0; font-family: 'Inter', sans-serif; }
+.tab, .tab-btn, .tab-btn { padding: 8px 14px; border: none; background: transparent; color: var(--bento-text-secondary); cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: var(--bento-transition); white-space: nowrap; margin-bottom: -2px; border-radius: 8px 8px 0 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .tab.active, .tab-btn.active, .tab-btn.active { color: var(--bento-primary); border-bottom-color: var(--bento-primary); background: rgba(59, 130, 246, 0.04); }
 .tab:hover, .tab-btn:hover, .tab-btn:hover { color: var(--bento-primary); background: rgba(59, 130, 246, 0.04); }
 .tab-icon { margin-right: 6px; }
 .tab-content { display: none; }
 .tab-content.active { display: block; animation: fadeSlideIn 0.3s ease-out; }
 
-button, .btn, .btn-s { padding: 9px 16px; border: 1.5px solid var(--bento-border); background: var(--bento-card); color: var(--bento-text); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: 'Inter', sans-serif; transition: var(--bento-transition); }
+button, .btn, .btn-s { padding: 9px 16px; border: 1.5px solid var(--bento-border); background: var(--bento-card); color: var(--bento-text); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; transition: var(--bento-transition); }
 button:hover, .btn:hover, .btn-s:hover { background: var(--bento-bg); border-color: var(--bento-primary); color: var(--bento-primary); }
 button.active, .btn.active, .btn-act { background: var(--bento-primary); color: white; border-color: var(--bento-primary); box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25); }
-.btn-primary { padding: 9px 16px; background: var(--bento-primary); color: white; border: 1.5px solid var(--bento-primary); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; transition: var(--bento-transition); box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25); }
+.btn-primary { padding: 9px 16px; background: var(--bento-primary); color: white; border: 1.5px solid var(--bento-primary); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; transition: var(--bento-transition); box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25); }
 .btn-primary:hover { background: var(--bento-primary-hover); border-color: var(--bento-primary-hover); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35); transform: translateY(-1px); }
-.btn-secondary { padding: 9px 16px; background: var(--bento-card); color: var(--bento-text); border: 1.5px solid var(--bento-border); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: 'Inter', sans-serif; transition: var(--bento-transition); }
+.btn-secondary { padding: 9px 16px; background: var(--bento-card); color: var(--bento-text); border: 1.5px solid var(--bento-border); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; transition: var(--bento-transition); }
 .btn-secondary:hover { border-color: var(--bento-primary); color: var(--bento-primary); background: rgba(59, 130, 246, 0.04); }
-.btn-danger { padding: 9px 16px; background: var(--bento-card); color: var(--bento-error); border: 1.5px solid var(--bento-error); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: 'Inter', sans-serif; transition: var(--bento-transition); }
+.btn-danger { padding: 9px 16px; background: var(--bento-card); color: var(--bento-error); border: 1.5px solid var(--bento-error); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; transition: var(--bento-transition); }
 .btn-danger:hover { background: var(--bento-error); color: white; }
-.btn-small { padding: 5px 12px; font-size: 12px; border: 1px solid var(--bento-border); background: var(--bento-card); color: var(--bento-text-secondary); border-radius: var(--bento-radius-xs); cursor: pointer; font-weight: 500; font-family: 'Inter', sans-serif; transition: var(--bento-transition); }
+.btn-small { padding: 5px 12px; font-size: 12px; border: 1px solid var(--bento-border); background: var(--bento-card); color: var(--bento-text-secondary); border-radius: var(--bento-radius-xs); cursor: pointer; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; transition: var(--bento-transition); }
 .btn-small:hover { border-color: var(--bento-primary); color: var(--bento-primary); background: rgba(59, 130, 246, 0.04); }
 
-input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="email"], input[type="search"], select, textarea, .search-input, .sinput, .sinput-sm, .alert-search-box, .period-select { padding: 9px 14px; border: 1.5px solid var(--bento-border); border-radius: var(--bento-radius-sm); font-size: 13px; background: var(--bento-card); color: var(--bento-text); font-family: 'Inter', sans-serif; transition: var(--bento-transition); outline: none; }
+input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="email"], input[type="search"], select, textarea, .search-input, .sinput, .sinput-sm, .alert-search-box, .period-select { padding: 9px 14px; border: 1.5px solid var(--bento-border); border-radius: var(--bento-radius-sm); font-size: 13px; background: var(--bento-card); color: var(--bento-text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; transition: var(--bento-transition); outline: none; }
 input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus, input[type="time"]:focus, select:focus, textarea:focus, .search-input:focus, .sinput:focus, .sinput-sm:focus, .alert-search-box:focus, .period-select:focus { border-color: var(--bento-primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
 input::placeholder, .search-input::placeholder, .sinput::placeholder, .sinput-sm::placeholder { color: var(--bento-text-secondary); opacity: 0.7; }
 .form-group { margin-bottom: 16px; }
@@ -2871,12 +2908,12 @@ textarea { min-height: 80px; resize: vertical; }
 .stat-trend.negative, .trend-down { color: var(--bento-error); }
 
 .device-table, .entity-table, .table, .alert-table, .data-table, .backup-table, .history-table, .log-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 16px; }
-.device-table th, .entity-table th, .table th, .alert-table th, .data-table th, .backup-table th, table th { text-align: left; padding: 12px 16px; border-bottom: 2px solid var(--bento-border); font-weight: 600; color: var(--bento-text-secondary); background: var(--bento-bg); cursor: pointer; user-select: none; white-space: nowrap; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; transition: var(--bento-transition); font-family: 'Inter', sans-serif; }
+.device-table th, .entity-table th, .table th, .alert-table th, .data-table th, .backup-table th, table th { text-align: left; padding: 12px 16px; border-bottom: 2px solid var(--bento-border); font-weight: 600; color: var(--bento-text-secondary); background: var(--bento-bg); cursor: pointer; user-select: none; white-space: nowrap; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; transition: var(--bento-transition); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .device-table th:first-child, .entity-table th:first-child, .table th:first-child, table th:first-child { border-radius: var(--bento-radius-xs) 0 0 0; }
 .device-table th:last-child, .entity-table th:last-child, .table th:last-child, table th:last-child { border-radius: 0 var(--bento-radius-xs) 0 0; }
 .device-table th:hover, .entity-table th:hover, .table th:hover, table th:hover { background: rgba(59, 130, 246, 0.06); color: var(--bento-primary); }
 .device-table th.sorted, .entity-table th.sorted, .table th.sorted, table th.sorted { background: rgba(59, 130, 246, 0.08); color: var(--bento-primary); }
-.device-table td, .entity-table td, .table td, .alert-table td, .data-table td, .backup-table td, table td { padding: 12px 16px; border-bottom: 1px solid var(--bento-border); color: var(--bento-text); font-size: 13px; font-family: 'Inter', sans-serif; }
+.device-table td, .entity-table td, .table td, .alert-table td, .data-table td, .backup-table td, table td { padding: 12px 16px; border-bottom: 1px solid var(--bento-border); color: var(--bento-text); font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .device-table tr:hover, .entity-table tr:hover, .table tbody tr:hover, .alert-table tr:hover, table tr:hover { background: rgba(59, 130, 246, 0.03); }
 .table-container { overflow-x: auto; border-radius: var(--bento-radius-sm); border: 1px solid var(--bento-border); }
 .sort-indicator { font-size: 10px; margin-left: 4px; color: var(--bento-primary); }
@@ -2933,13 +2970,13 @@ textarea { min-height: 80px; resize: vertical; }
 .battery-label, .bandwidth-label { font-size: 13px; color: var(--bento-text); font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
 
 .pagination, .pag { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 20px; padding: 16px 0; border-top: 1px solid var(--bento-border); }
-.pagination-btn, .pag-btn { padding: 8px 14px; border: 1.5px solid var(--bento-border); background: var(--bento-card); color: var(--bento-text); border-radius: var(--bento-radius-xs); cursor: pointer; font-size: 13px; font-weight: 500; font-family: 'Inter', sans-serif; transition: var(--bento-transition); }
+.pagination-btn, .pag-btn { padding: 8px 14px; border: 1.5px solid var(--bento-border); background: var(--bento-card); color: var(--bento-text); border-radius: var(--bento-radius-xs); cursor: pointer; font-size: 13px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; transition: var(--bento-transition); }
 .pagination-btn:hover:not(:disabled), .pag-btn:hover:not(:disabled) { background: var(--bento-primary); color: white; border-color: var(--bento-primary); }
 .pagination-btn:disabled, .pag-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .pagination-info, .pag-info { font-size: 13px; color: var(--bento-text-secondary); font-weight: 500; padding: 0 8px; }
-.page-size-selector, .pag-size { padding: 6px 10px; border: 1.5px solid var(--bento-border); border-radius: var(--bento-radius-xs); background: var(--bento-card); color: var(--bento-text); font-size: 13px; cursor: pointer; font-family: 'Inter', sans-serif; }
+.page-size-selector, .pag-size { padding: 6px 10px; border: 1.5px solid var(--bento-border); border-radius: var(--bento-radius-xs); background: var(--bento-card); color: var(--bento-text); font-size: 13px; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 
-.col-main { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--bento-text); }
+.col-main { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; color: var(--bento-text); }
 .topbar-r { display: flex; gap: 8px; align-items: center; }
 .panels { display: flex; gap: 12px; }
 .pan-left, .pan-center, .pan-right { background: var(--bento-card); border-radius: var(--bento-radius-sm); border: 1px solid var(--bento-border); overflow: hidden; }
@@ -2950,11 +2987,11 @@ textarea { min-height: 80px; resize: vertical; }
 .dd { position: relative; }
 .dd-menu { position: absolute; top: 100%; left: 0; background: var(--bento-card); border: 1px solid var(--bento-border); border-radius: var(--bento-radius-sm); box-shadow: var(--bento-shadow-md); min-width: 180px; z-index: 100; display: none; overflow: hidden; }
 .dd.open .dd-menu { display: block; }
-.dd-i { padding: 10px 16px; cursor: pointer; font-size: 13px; color: var(--bento-text); transition: var(--bento-transition); font-family: 'Inter', sans-serif; }
+.dd-i { padding: 10px 16px; cursor: pointer; font-size: 13px; color: var(--bento-text); transition: var(--bento-transition); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .dd-i:hover { background: rgba(59, 130, 246, 0.06); color: var(--bento-primary); }
 .dd-div { border-top: 1px solid var(--bento-border); margin: 4px 0; }
 
-.auto-item, .tr-item, .list-item, .automation-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--bento-border); display: flex; align-items: center; gap: 10px; transition: var(--bento-transition); font-family: 'Inter', sans-serif; }
+.auto-item, .tr-item, .list-item, .automation-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--bento-border); display: flex; align-items: center; gap: 10px; transition: var(--bento-transition); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .auto-item:hover, .tr-item:hover, .list-item:hover, .automation-item:hover { background: rgba(59, 130, 246, 0.04); }
 .auto-item.sel, .tr-item.sel, .list-item.selected, .automation-item.selected { background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--bento-primary); }
 .auto-item.error-item, .automation-item.error-item { border-left: 3px solid var(--bento-error); }
@@ -2967,7 +3004,7 @@ textarea { min-height: 80px; resize: vertical; }
 .auto-count { font-size: 11px; color: var(--bento-text-secondary); margin-left: auto; }
 
 .tgroup { border: 1px solid var(--bento-border); border-radius: var(--bento-radius-xs); margin-bottom: 8px; overflow: hidden; }
-.tgroup-h { padding: 10px 14px; background: var(--bento-bg); display: flex; align-items: center; gap: 8px; cursor: pointer; transition: var(--bento-transition); font-family: 'Inter', sans-serif; }
+.tgroup-h { padding: 10px 14px; background: var(--bento-bg); display: flex; align-items: center; gap: 8px; cursor: pointer; transition: var(--bento-transition); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .tgroup-h:hover { background: rgba(59, 130, 246, 0.06); }
 .tg-tog { transition: transform 0.2s; font-size: 12px; color: var(--bento-text-secondary); }
 .tgroup.collapsed .tg-tog { transform: rotate(-90deg); }
@@ -3004,7 +3041,7 @@ textarea { min-height: 80px; resize: vertical; }
 
 .baby-selector { display: flex; gap: 8px; margin-bottom: 16px; }
 .quick-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
-.quick-btn, .action-btn { padding: 10px 16px; border: 1.5px solid var(--bento-border); background: var(--bento-card); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: 'Inter', sans-serif; transition: var(--bento-transition); display: flex; align-items: center; gap: 6px; color: var(--bento-text); }
+.quick-btn, .action-btn { padding: 10px 16px; border: 1.5px solid var(--bento-border); background: var(--bento-card); border-radius: var(--bento-radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; transition: var(--bento-transition); display: flex; align-items: center; gap: 6px; color: var(--bento-text); }
 .quick-btn:hover, .action-btn:hover { border-color: var(--bento-primary); color: var(--bento-primary); background: rgba(59, 130, 246, 0.04); }
 .quick-btn.active, .action-btn.active { background: var(--bento-primary); color: white; border-color: var(--bento-primary); }
 .timeline { position: relative; padding-left: 24px; }
@@ -3016,7 +3053,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 .canvas-container { position: relative; margin-bottom: 16px; }
 .chart-container { background: var(--bento-bg); border-radius: var(--bento-radius-sm); padding: 16px; border: 1px solid var(--bento-border); margin-bottom: 16px; }
 
-.empty, .empty-state { text-align: center; padding: 48px 24px; color: var(--bento-text-secondary); font-size: 14px; font-family: 'Inter', sans-serif; }
+.empty, .empty-state { text-align: center; padding: 48px 24px; color: var(--bento-text-secondary); font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .empty-ico, .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
 .spinner { width: 32px; height: 32px; border: 3px solid var(--bento-border); border-top: 3px solid var(--bento-primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 24px auto; }
 
@@ -3065,7 +3102,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 
 .sentence-item, .intent-item { padding: 12px 16px; border-bottom: 1px solid var(--bento-border); display: flex; justify-content: space-between; align-items: center; transition: var(--bento-transition); }
 .sentence-item:hover, .intent-item:hover { background: rgba(59, 130, 246, 0.03); }
-.sentence-text { font-size: 13px; color: var(--bento-text); font-family: 'Inter', sans-serif; }
+.sentence-text { font-size: 13px; color: var(--bento-text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
 .intent-badge { display: inline-flex; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: rgba(59, 130, 246, 0.1); color: var(--bento-primary); }
 
 .backup-item, .backup-entry { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--bento-border); transition: var(--bento-transition); }
