@@ -1,3 +1,8 @@
+## [5.0.1] - 2026-06-13
+
+### Added
+- getGridOptions() for sections (grid) layout sizing.
+
 # Changelog
 
 ## 5.0.0 — 2026-05-13

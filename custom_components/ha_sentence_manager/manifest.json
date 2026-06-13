@@ -1,13 +1,22 @@
 {
   "domain": "ha_sentence_manager",
   "name": "HA Sentence Manager",
-  "codeowners": ["@MacSiem"],
+  "codeowners": [
+    "@MacSiem"
+  ],
   "config_flow": true,
-  "dependencies": ["conversation", "frontend", "http", "websocket_api"],
+  "dependencies": [
+    "conversation",
+    "frontend",
+    "http",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/MacSiem/ha-sentence-manager",
   "integration_type": "service",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/MacSiem/ha-sentence-manager/issues",
-  "requirements": ["pyyaml>=6.0"],
-  "version": "5.0.0"
+  "requirements": [
+    "pyyaml>=6.0"
+  ],
+  "version": "5.0.1"
 }
