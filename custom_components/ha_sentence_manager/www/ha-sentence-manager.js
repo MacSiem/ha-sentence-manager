@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.0.2 (2026-05-13) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.0.3 (2026-05-13) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
@@ -1597,6 +1597,8 @@ class HASentenceManager extends HTMLElement {
           <button class="btn btn-secondary" id="reload-ha-btn">🔄 ${this._lang === 'pl' ? 'Odśwież' : 'Refresh'}</button>
         </div>
       `;
+    } else if (this._haSentencesError) {
+      contentHtml = `<div style="margin:8px 0;padding:10px 14px;background:var(--bento-error-light);color:var(--bento-error);border:1px solid var(--bento-error-border);border-radius:var(--bento-radius-sm);font-size:13px;">⚠️ ${this._escapeHtml(this._haSentencesError)}</div>`;
     } else {
       // No data loaded yet or file not found — show structured info + load options
       contentHtml = `
