@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.0.4 (2026-05-13) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.0.5 (2026-05-13) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
@@ -1842,22 +1842,53 @@ class HASentenceManager extends HTMLElement {
     const haResult = this._testResultHA;
     let haResultHtml = '';
     if (this._testLoading) {
-      haResultHtml = '<div class="loading-spinner"><div class="spinner"></div> Testowanie przez HA Conversation API...</div>';
+      haResultHtml = `
+        <div class="tryit-result-card tryit-loading">
+          <div class="loading-spinner"><div class="spinner"></div> ${this._lang === 'pl' ? 'Wysyłanie do HA Conversation API...' : 'Sending to HA Conversation API...'}</div>
+        </div>`;
     } else if (haResult) {
       if (haResult.success) {
         const isMatch = haResult.responseType === 'action_done' || haResult.responseType === 'query_answer';
+        // Extract intent name from the conversation/process response data structure
+        // HA returns: response.data.success_results[0].result.intent.name
+        // or older: response.data.success.result.intent.name
+        let intentName = null;
+        try {
+          const d = haResult.data;
+          if (d) {
+            if (Array.isArray(d.success_results) && d.success_results.length > 0) {
+              intentName = (d.success_results[0].result && d.success_results[0].result.intent && d.success_results[0].result.intent.name) || null;
+            } else if (d.success && d.success.result && d.success.result.intent) {
+              intentName = d.success.result.intent.name || null;
+            }
+          }
+        } catch(e) {}
+        const intentLabel = intentName
+          ? `<div class="tryit-intent"><span class="tryit-intent-label">${this._lang === 'pl' ? 'Intent:' : 'Intent:'}</span> <span class="tryit-intent-chip">${this._escapeHtml(intentName)}</span></div>`
+          : '';
         haResultHtml = `
-          <div class="ha-test-result ${isMatch ? 'test-match' : 'test-no-match'}">
-            <div class="result-header">
-              <span class="badge ${isMatch ? 'badge-success' : 'badge-warning'}">${isMatch ? '\u2705 Rozpoznano' : '\u26A0\uFE0F Brak dopasowania'}</span>
-              <span class="result-type">${haResult.responseType}</span>
+          <div class="tryit-result-card ${isMatch ? 'tryit-match' : 'tryit-nomatch'}">
+            <div class="tryit-result-header">
+              <span class="badge ${isMatch ? 'badge-success' : 'badge-warning'}">${isMatch ? '✅ ' + (this._lang === 'pl' ? 'Rozpoznano' : 'Matched') : '⚠️ ' + (this._lang === 'pl' ? 'Brak dopasowania' : 'No match')}</span>
+              <span class="tryit-response-type">${this._escapeHtml(haResult.responseType)}</span>
             </div>
-            <div class="result-input"><strong>${this._lang === 'pl' ? 'Wejście:' : 'Input:'}</strong> ${this._escapeHtml(haResult.input)}</div>
-            <div class="result-response"><strong>${this._lang === 'pl' ? 'Odpowiedź HA:' : 'HA Response:'}</strong> ${this._escapeHtml(haResult.response)}</div>
+            <div class="tryit-speech">
+              <span class="tryit-speech-label">${this._lang === 'pl' ? 'Odpowiedź:' : 'Response:'}</span>
+              <span class="tryit-speech-text">${this._escapeHtml(haResult.response)}</span>
+            </div>
+            ${intentLabel}
+            <div class="tryit-input-echo"><span class="tryit-input-label">${this._lang === 'pl' ? 'Zapytanie:' : 'Input:'}</span> <code>${this._escapeHtml(haResult.input)}</code></div>
           </div>
         `;
       } else {
-        haResultHtml = `<div class="ha-test-result test-error"><strong>${this._lang === 'pl' ? 'Błąd:' : 'Error:'}</strong> ${this._escapeHtml(haResult.error)}</div>`;
+        haResultHtml = `
+          <div class="tryit-result-card tryit-error">
+            <div class="tryit-result-header">
+              <span class="badge badge-error">❌ ${this._lang === 'pl' ? 'Błąd' : 'Error'}</span>
+            </div>
+            <div class="tryit-speech tryit-speech-error">${this._escapeHtml(haResult.error || 'Unknown error')}</div>
+            <div class="tryit-input-echo"><span class="tryit-input-label">${this._lang === 'pl' ? 'Zapytanie:' : 'Input:'}</span> <code>${this._escapeHtml(haResult.input)}</code></div>
+          </div>`;
       }
     }
     return `
@@ -1865,20 +1896,38 @@ class HASentenceManager extends HTMLElement {
         <div class="test-section">
           <h2>🧪 ${this._lang === 'pl' ? 'Test Sentence' : 'Test Sentence'}</h2>
           <p class="section-desc">${this._lang === 'pl' ? 'Testuj zdania bezpośrednio przez Home Assistant Conversation API.' : 'Test sentences directly via Home Assistant Conversation API.'}</p>
-          <div class="test-input-row">
-            <input type="text" id="test-input" placeholder="${this._lang === 'pl' ? 'Wpisz komendę głosową, np. włącz światło w salonie...' : 'Enter voice command, e.g. turn on the living room light...'}" class="test-input" style="flex:1;">
-            <button class="btn btn-primary" id="test-ha-btn">🏠 ${this._lang === 'pl' ? 'Test HA' : 'Test HA'}</button>
-            <button class="btn btn-secondary" id="test-btn">🔍 ${this._lang === 'pl' ? 'Test lokalny' : 'Test local'}</button>
+
+          <!-- Try it: HA Conversation intent tester -->
+          <div class="tryit-section">
+            <div class="tryit-header">
+              <span class="tryit-title">▶ ${this._lang === 'pl' ? 'Wypróbuj komendę głosową' : 'Try it — test a voice command'}</span>
+              <span class="tryit-hint">${this._lang === 'pl' ? 'Wysyła tekst do HA Conversation API i pokazuje odpowiedź + dopasowany intent.' : 'Sends text to HA Conversation API and shows the response + matched intent.'}</span>
+            </div>
+            <div class="tryit-input-row">
+              <input type="text" id="test-input" placeholder="${this._lang === 'pl' ? 'Wpisz komendę głosową, np. włącz światło w salonie...' : 'Enter voice command, e.g. turn on the living room light...'}" class="test-input tryit-input">
+              <button class="btn btn-primary tryit-btn" id="test-ha-btn">▶ ${this._lang === 'pl' ? 'Testuj' : 'Test'}</button>
+            </div>
+            <div class="quick-test-phrases" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+              <span style="font-size:12px;color:var(--bento-text-muted);margin-right:4px;">${this._lang === 'pl' ? 'Szybki test:' : 'Quick test:'}</span>
+              <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'włącz światło w salonie' : 'turn on the living room light'}">${this._lang === 'pl' ? 'światło' : 'light on'}</button>
+              <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'jaka jest temperatura na zewnątrz' : 'what is the outside temperature'}">${this._lang === 'pl' ? 'temperatura' : 'temperature'}</button>
+              <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'zamknij rolety w sypialni' : 'close the bedroom blinds'}">${this._lang === 'pl' ? 'rolety' : 'blinds'}</button>
+              <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'jaka jest pogoda' : 'what is the weather'}">${this._lang === 'pl' ? 'pogoda' : 'weather'}</button>
+              <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'wyłącz wszystkie światła' : 'turn off all lights'}">${this._lang === 'pl' ? 'wszystkie wył' : 'all off'}</button>
+            </div>
+            ${haResultHtml}
           </div>
-          <div class="quick-test-phrases" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:4px;">
-            <span style="font-size:12px; color:var(--bento-text-muted); margin-right:4px;">${this._lang === 'pl' ? 'Szybki test:' : 'Quick test:'}</span>
-            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'włącz światło w salonie' : 'turn on the living room light'}">${this._lang === 'pl' ? 'światło' : 'light on'}</button>
-            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'jaka jest temperatura na zewnątrz' : 'what is the outside temperature'}">${this._lang === 'pl' ? 'temperatura' : 'temperature'}</button>
-            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'zamknij rolety w sypialni' : 'close the bedroom blinds'}">${this._lang === 'pl' ? 'rolety' : 'blinds'}</button>
-            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'jaka jest pogoda' : 'what is the weather'}">${this._lang === 'pl' ? 'pogoda' : 'weather'}</button>
-            <button class="btn btn-small quick-test-btn" data-phrase="${this._lang === 'pl' ? 'wyłącz wszystkie światła' : 'turn off all lights'}">${this._lang === 'pl' ? 'wszystkie wył' : 'all off'}</button>
+
+          <!-- Local pattern matcher (secondary, offline) -->
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--bento-border);">
+            <div style="font-size:12px;font-weight:600;color:var(--bento-text-secondary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">
+              ${this._lang === 'pl' ? 'Test lokalny (dopasowanie wzorców, offline)' : 'Local pattern match (offline)'}
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="test-local-input" placeholder="${this._lang === 'pl' ? 'Szukaj wzorca lokalnie...' : 'Match pattern locally...'}" style="flex:1;">
+              <button class="btn btn-secondary" id="test-btn">🔍 ${this._lang === 'pl' ? 'Test lokalny' : 'Local test'}</button>
+            </div>
           </div>
-          ${haResultHtml}
           <div id="test-results" class="test-results" style="margin-top:12px;"></div>
         </div>
       </div>
@@ -2004,7 +2053,8 @@ class HASentenceManager extends HTMLElement {
     });
     // Test - Local matching
     this.shadowRoot.querySelector('#test-btn')?.addEventListener('click', () => {
-      const input = this.shadowRoot.querySelector('#test-input').value;
+      const localInput = this.shadowRoot.querySelector('#test-local-input');
+      const input = (localInput ? localInput.value : this.shadowRoot.querySelector('#test-input')?.value) || '';
       const results = this.testSentenceMatching(input);
       this.displayTestResults(results, input);
     });
@@ -2409,6 +2459,50 @@ canvas {
 @keyframes spin { to { transform: rotate(360deg); } }
 .quick-test-btn { padding: 3px 8px !important; font-size: 11px !important; background: var(--bento-bg) !important; border: 1px solid var(--bento-border) !important; color: var(--bento-text-secondary) !important; }
 .quick-test-btn:hover { background: var(--bento-primary-light) !important; color: var(--bento-primary) !important; }
+/* ── Try it — intent tester ─────────────────────────── */
+.tryit-section {
+  background: var(--bento-bg-2, var(--bento-bg));
+  border: 1.5px solid var(--bento-border);
+  border-radius: var(--bento-radius-sm);
+  padding: 16px;
+  margin-bottom: 4px;
+}
+.tryit-header { margin-bottom: 12px; }
+.tryit-title { display: block; font-size: 14px; font-weight: 700; color: var(--bento-text); letter-spacing: -0.01em; margin-bottom: 4px; }
+.tryit-hint { display: block; font-size: 12px; color: var(--bento-text-muted); line-height: 1.4; }
+.tryit-input-row { display: flex; gap: 8px; align-items: stretch; }
+.tryit-input { flex: 1; }
+.tryit-btn { white-space: nowrap; flex-shrink: 0; }
+.tryit-result-card {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: var(--bento-radius-sm);
+  border: 1px solid var(--bento-border);
+  font-size: 13px;
+  animation: bentoSlideIn 0.25s ease;
+}
+.tryit-result-card.tryit-loading { background: var(--bento-primary-light); color: var(--bento-text-secondary); }
+.tryit-result-card.tryit-match { background: var(--bento-success-light); border-color: var(--bento-success-border); }
+.tryit-result-card.tryit-nomatch { background: var(--bento-warning-light); border-color: var(--bento-warning-border); }
+.tryit-result-card.tryit-error { background: var(--bento-error-light); border-color: var(--bento-error-border); }
+.tryit-result-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tryit-response-type { font-size: 11px; color: var(--bento-text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tryit-speech { margin-bottom: 8px; line-height: 1.5; }
+.tryit-speech-label { font-weight: 600; color: var(--bento-text-secondary); margin-right: 6px; }
+.tryit-speech-text { color: var(--bento-text); font-size: 14px; font-weight: 500; }
+.tryit-speech-error { color: var(--bento-error); font-weight: 500; }
+.tryit-intent { margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.tryit-intent-label { font-size: 12px; font-weight: 600; color: var(--bento-text-secondary); }
+.tryit-intent-chip {
+  display: inline-flex; align-items: center; padding: 3px 10px;
+  background: var(--bento-primary-light); color: var(--bento-primary);
+  border: 1px solid var(--bento-border); border-radius: var(--bento-radius-pill);
+  font-size: 12px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.01em;
+}
+.tryit-input-echo { font-size: 12px; color: var(--bento-text-muted); }
+.tryit-input-label { font-weight: 600; }
+.tryit-input-echo code { font-size: 11.5px; }
 
 /* ===== END BENTO LIGHT MODE ===== */
 
