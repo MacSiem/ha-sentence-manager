@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.0.3 (2026-05-13) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.0.4 (2026-05-13) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
@@ -19,6 +19,8 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
    ═══════════════════════════════════════════════ */
 
 /* fonts: system stack — no CDN */
+/* keyboard a11y */
+:focus-visible { outline: 2px solid var(--bento-primary, #6366f1); outline-offset: 2px; border-radius: 3px; }
 :host {
   /* Brand palette — diamond top, gradient-friendly */
   --bento-primary: #6366f1;
