@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HSM screenshot harness</title>
+<style>
+  html, body { margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body.light { background: #f4f5f7; }
+  body.light ha-sentence-manager { --card-background-color: #ffffff; --primary-background-color: #f4f5f7; }
+  body.dark { background: #111318; }
+  body.dark ha-sentence-manager { --card-background-color: #1c1e26; --primary-background-color: #111318; }
+  ha-sentence-manager { display: block; width: 480px; }
+</style>
+</head>
+<body>
+<ha-sentence-manager id="card"></ha-sentence-manager>
+<script>
+  try { localStorage.setItem('ha-intro-dismissed-ha-sentence-manager', '1'); } catch (e) {}
+  try { localStorage.setItem('ha-tools-sentence-manager-tips-v3.0.0', 'dismissed'); } catch (e) {}
+</script>
+<script src="../../custom_components/ha_sentence_manager/www/ha-sentence-manager.js"></script>
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+  const tabParam = params.get('tab');
+  document.body.className = theme;
+
+  // Realistic demo entries matching the exact `ha_sentence_manager/list`
+  // response shape: {id, language, intent, sentences, slots, response}.
+  const sentences = [
+    { id: 'en:HassLightSet:1a2b3c4d', language: 'en', intent: 'HassLightSet',
+      sentences: ['Turn on the {area} lights', 'Turn on {area} lighting'],
+      slots: { area: 'string' }, response: 'Turning on the {area} lights' },
+    { id: 'en:HassLightSet:5e6f7a8b', language: 'en', intent: 'HassLightSet',
+      sentences: ['Turn off the {area} lights'],
+      slots: { area: 'string' }, response: '' },
+    { id: 'en:HassLightSet:9c0d1e2f', language: 'en', intent: 'HassLightSet',
+      sentences: ['Set {area} brightness to {level} percent'],
+      slots: { area: 'string', level: 'number' }, response: '' },
+    { id: 'en:HassClimateSetTemperature:3a4b5c6d', language: 'en', intent: 'HassClimateSetTemperature',
+      sentences: ['Set the temperature to {degrees} degrees', 'Make it {degrees} degrees in the {room}'],
+      slots: { degrees: 'number', room: 'string' }, response: 'Setting temperature to {degrees} degrees' },
+    { id: 'en:HassMediaPlay:7e8f9a0b', language: 'en', intent: 'HassMediaPlay',
+      sentences: ['Play {playlist} in the {area}'],
+      slots: { playlist: 'string', area: 'string' }, response: '' },
+    { id: 'en:HassMediaPause:1c2d3e4f', language: 'en', intent: 'HassMediaPause',
+      sentences: ['Pause the music', 'Stop playback'],
+      slots: {}, response: 'Music paused' },
+    { id: 'en:HassCoverOpen:5a6b7c8d', language: 'en', intent: 'HassCoverOpen',
+      sentences: ['Open the {cover_name} blinds'],
+      slots: { cover_name: 'string' }, response: '' },
+    { id: 'en:HassCoverClose:9e0f1a2b', language: 'en', intent: 'HassCoverClose',
+      sentences: ['Close the {cover_name}'],
+      slots: { cover_name: 'string' }, response: '' },
+    { id: 'en:HassLockLock:3c4d5e6f', language: 'en', intent: 'HassLockLock',
+      sentences: ['Lock the {lock_name}'],
+      slots: { lock_name: 'string' }, response: '{lock_name} locked' },
+    { id: 'en:HassSceneActivate:7a8b9c0d', language: 'en', intent: 'HassSceneActivate',
+      sentences: ['Activate {scene_name}', 'Turn on {scene_name} scene'],
+      slots: { scene_name: 'string' }, response: '' },
+  ];
+
+  const hass = {
+    language: 'en',
+    config: { language: 'en' },
+    themes: { darkMode: theme === 'dark' },
+    states: {},
+    services: { ha_sentence_manager: { reload: {} }, conversation: { process: {}, reload: {} } },
+    connection: { subscribeEvents: () => Promise.resolve(() => {}) },
+    callWS: async (msg) => {
+      const t = String(msg && msg.type || '');
+      if (t === 'ha_sentence_manager/list') {
+        return msg.language ? sentences.filter((s) => s.language === msg.language) : sentences;
+      }
+      if (t === 'ha_sentence_manager/create') {
+        return { id: 'en:Demo:' + Math.random().toString(16).slice(2, 10) };
+      }
+      if (t === 'ha_sentence_manager/update') return { ok: true };
+      if (t === 'ha_sentence_manager/delete') return { ok: true };
+      if (t === 'ha_sentence_manager/reload') return { ok: true };
+      if (t === 'conversation/process') {
+        return {
+          conversation_id: 'demo-conversation-1',
+          response: {
+            response_type: 'action_done',
+            speech: { plain: { speech: 'Turning on the living room lights' } },
+            data: { success_results: [{ result: { intent: { name: 'HassLightSet' } } }] },
+          },
+        };
+      }
+      return {};
+    },
+    callApi: async () => ({}),
+    callService: async () => ({}),
+  };
+
+  const card = document.getElementById('card');
+  card.setConfig({ type: 'custom:ha-sentence-manager', title: 'Sentence Manager', language: 'en' });
+  card.hass = hass;
+  setTimeout(() => { card.hass = { ...hass }; }, 300);
+
+  const validTabs = ['ha-sentences', 'editor', 'list', 'test', 'export', 'actions'];
+  if (tabParam && validTabs.includes(tabParam)) {
+    setTimeout(() => {
+      try {
+        card.currentTab = tabParam;
+        card.render();
+      } catch (e) {}
+    }, 700);
+  }
+
+  const scrub = () => {
+    try {
+      card.shadowRoot && card.shadowRoot.querySelectorAll('#tip-banner, [class*="banner"], .donate-section, [class*="donate"], [class*="support"]').forEach((n) => n.remove());
+      // Fallback: remove any block whose heading mentions supporting development.
+      card.shadowRoot && card.shadowRoot.querySelectorAll('div,section').forEach((n) => {
+        if (n.children.length && /Support HA Tools Development/.test(n.textContent) && n.textContent.length < 600) n.remove();
+      });
+    } catch (e) {}
+  };
+  setInterval(scrub, 150);
+  setTimeout(() => { scrub(); document.title = 'READY'; }, 1500);
+})();
+</script>
+</body>
+</html>
