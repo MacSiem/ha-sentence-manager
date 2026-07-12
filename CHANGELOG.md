@@ -1,5 +1,9 @@
 # Changelog
 
+## [5.0.6] - 2026-07-12
+
+- Fix: the card now renders for non-admin Home Assistant users — the read-only `list` websocket command no longer requires admin. Mutations (`create`/`update`/`delete`/`reload`) stay admin-only (they modify HA conversation config).
+
 ## [5.0.5] - 2026-06-15
 
 - Theme: dark/light now follows the active Home Assistant theme (luminance of --card-background-color) instead of OS prefers-color-scheme.

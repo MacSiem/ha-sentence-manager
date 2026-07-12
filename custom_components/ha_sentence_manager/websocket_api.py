@@ -40,7 +40,9 @@ def _storage(hass: HomeAssistant) -> SentenceStorage:
         vol.Optional("language"): str,
     }
 )
-@websocket_api.require_admin
+# Read-only: open to every logged-in user so the card renders for non-admins.
+# Mutations (create/update/delete/reload) stay admin-only — they modify HA
+# conversation config.
 @websocket_api.async_response
 async def _ws_list(
     hass: HomeAssistant,
