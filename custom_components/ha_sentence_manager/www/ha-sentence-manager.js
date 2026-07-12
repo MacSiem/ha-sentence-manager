@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.0.7 (2026-07-12) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.0.8 (2026-07-12) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.0.8 (2026-07-12)
+
+- Fix: manifest version for the card cache-bust URL is now read through HA's
+  integration loader instead of a blocking `open()` inside the event loop
+  (removes the "Detected blocking call" warning on setup).
+
 ## [5.0.7] - 2026-07-12
 
 - Fix: the card now checks the `{"ok": false}` result from the `update` and `delete` websocket commands and shows an error toast (EN/PL) instead of reporting a false success when the server could not find the sentence.
