@@ -4,7 +4,7 @@
 
 Manage Home Assistant Assist custom sentences (intents, slots, responses) from a Lovelace card. Sentences are stored in Home Assistant's official `custom_sentences/<language>/` directory by the bundled Python integration — not in browser storage.
 
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Version](https://img.shields.io/badge/Version-5.0.0-success.svg)](#changelog)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Version](https://img.shields.io/github/v/release/MacSiem/ha-sentence-manager)](https://github.com/MacSiem/ha-sentence-manager/releases)
 
 ## Architecture
 
