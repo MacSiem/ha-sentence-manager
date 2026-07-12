@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.0.5 (2026-05-13) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.0.7 (2026-07-12) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
@@ -1293,11 +1293,14 @@ class HASentenceManager extends HTMLElement {
         const all = existing ? existing._allSentences.slice() : [];
         if (all.length === 0) all.push(trigger);
         else all[0] = trigger; // first phrase is the canonical one in v5.0 UI
-        await this._apiUpdate(this.editingId, {
+        const res = await this._apiUpdate(this.editingId, {
           sentences: all,
           slots,
           response,
         });
+        if (res && res.ok === false) {
+          throw new Error(this._lang === 'pl' ? 'serwer nie znalazł zdania do aktualizacji' : 'server could not find the sentence to update');
+        }
       } else {
         await this._apiCreate({
           language,
@@ -1373,7 +1376,10 @@ class HASentenceManager extends HTMLElement {
     const promptText = this._lang === 'pl' ? 'Usunąć to zdanie?' : 'Delete this sentence?';
     if (!confirm(promptText)) return;
     try {
-      await this._apiDelete(sentence.id);
+      const res = await this._apiDelete(sentence.id);
+      if (res && res.ok === false) {
+        throw new Error(this._lang === 'pl' ? 'serwer nie znalazł zdania do usunięcia' : 'server could not find the sentence to delete');
+      }
     } catch (e) {
       console.warn('[ha-sentence-manager] deleteSentence failed', e);
       this.showNotification(`${this._lang === 'pl' ? 'Usuwanie nie powiodło się' : 'Delete failed'}: ${e.message || e}`, 'error');

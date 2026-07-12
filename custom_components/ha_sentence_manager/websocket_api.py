@@ -1,6 +1,8 @@
 """WebSocket API for HA Sentence Manager.
 
-Exposes five admin-only commands consumed by the bundled Lovelace card:
+Exposes five commands consumed by the bundled Lovelace card — one open
+read command (``list``) and four admin-only mutating commands
+(``create``/``update``/``delete``/``reload``):
 
 * ``ha_sentence_manager/list``    – list every persisted sentence (optional language filter)
 * ``ha_sentence_manager/create``  – add a new sentence for a (language, intent) pair

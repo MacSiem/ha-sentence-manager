@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.7] - 2026-07-12
+
+- Fix: the card now checks the `{"ok": false}` result from the `update` and `delete` websocket commands and shows an error toast (EN/PL) instead of reporting a false success when the server could not find the sentence.
+- Fix: corrected the stale `websocket_api.py` docstring — `list` is an open read command; only `create`/`update`/`delete`/`reload` are admin-only.
+- Chore: removed the `country` key from `hacs.json` — it hid the repository from HACS users outside PL/GB/US/DE.
+- Chore: aligned card JS version header with `manifest.json` (5.0.7).
+
 ## [5.0.6] - 2026-07-12
 
 - Fix: the card now renders for non-admin Home Assistant users — the read-only `list` websocket command no longer requires admin. Mutations (`create`/`update`/`delete`/`reload`) stay admin-only (they modify HA conversation config).

@@ -1,6 +1,5 @@
 {
   "name": "HA Sentence Manager",
   "render_readme": true,
-  "homeassistant": "2024.1.0",
-  "country": ["PL", "GB", "US", "DE"]
+  "homeassistant": "2024.1.0"
 }
