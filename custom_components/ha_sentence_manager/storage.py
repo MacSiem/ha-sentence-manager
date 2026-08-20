@@ -129,21 +129,52 @@ class SentenceStorage:
 
     def _root(self) -> str:
         """Absolute path to the ``custom_sentences`` directory."""
-        return self.hass.config.path(CUSTOM_SENTENCES_DIR_NAME)
+        return os.path.realpath(self.hass.config.path(CUSTOM_SENTENCES_DIR_NAME))
+
+    @staticmethod
+    def _validate_path_component(value: str, label: str) -> str:
+        """Return a safe single path component or reject traversal input."""
+        if (
+            not isinstance(value, str)
+            or not value
+            or ".." in value
+            or "/" in value
+            or "\\" in value
+            or "\x00" in value
+        ):
+            raise ValueError(f"invalid {label}")
+        return value
 
     def _lang_dir(self, language: str) -> str:
-        return os.path.join(self._root(), language)
+        root = self._root()
+        safe_language = self._validate_path_component(language, "language")
+        language_dir = os.path.realpath(os.path.join(root, safe_language))
+        if os.path.commonpath((root, language_dir)) != root:
+            raise ValueError("language path escapes custom_sentences")
+        return language_dir
 
     def _path_for(self, language: str, intent: str) -> str:
-        return os.path.join(
-            self._lang_dir(language), f"{FILE_PREFIX}{intent}.yaml"
+        root = self._root()
+        safe_intent = self._validate_path_component(intent, "intent")
+        path = os.path.realpath(
+            os.path.join(self._lang_dir(language), f"{FILE_PREFIX}{safe_intent}.yaml")
         )
+        if os.path.commonpath((root, path)) != root:
+            raise ValueError("sentence path escapes custom_sentences")
+        return path
 
     def _meta_path_for(self, language: str, intent: str) -> str:
-        return os.path.join(
-            self._lang_dir(language),
-            f"{_META_FILE_PREFIX}{FILE_PREFIX}{intent}.meta.yaml",
+        root = self._root()
+        safe_intent = self._validate_path_component(intent, "intent")
+        path = os.path.realpath(
+            os.path.join(
+                self._lang_dir(language),
+                f"{_META_FILE_PREFIX}{FILE_PREFIX}{safe_intent}.meta.yaml",
+            )
         )
+        if os.path.commonpath((root, path)) != root:
+            raise ValueError("metadata path escapes custom_sentences")
+        return path
 
     @staticmethod
     def _parse_id(sentence_id: str) -> tuple[str, str, str] | None:
@@ -152,6 +183,11 @@ class SentenceStorage:
             return None
         parts = sentence_id.split(":")
         if len(parts) != 3 or not all(parts):
+            return None
+        try:
+            SentenceStorage._validate_path_component(parts[0], "language")
+            SentenceStorage._validate_path_component(parts[1], "intent")
+        except ValueError:
             return None
         return parts[0], parts[1], parts[2]
 

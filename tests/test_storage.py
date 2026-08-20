@@ -106,6 +106,17 @@ class ParseIdTests(unittest.TestCase):
     def test_non_string_returns_none(self) -> None:
         self.assertIsNone(SentenceStorage._parse_id(None))  # type: ignore[arg-type]
 
+    def test_path_traversal_parts_return_none(self) -> None:
+        for sentence_id in (
+            "..:HassTurnOn:ab12cd34",
+            "../en:HassTurnOn:ab12cd34",
+            "en:../../configuration:ab12cd34",
+            "en:Hass/TurnOn:ab12cd34",
+            r"en:Hass\TurnOn:ab12cd34",
+        ):
+            with self.subTest(sentence_id=sentence_id):
+                self.assertIsNone(SentenceStorage._parse_id(sentence_id))
+
 
 class NormalizeTests(unittest.TestCase):
     def test_valid_entry_normalizes_all_fields(self) -> None:
@@ -202,20 +213,52 @@ class PathNamingConventionTests(unittest.TestCase):
 
     def test_path_for_uses_prefix_and_lang_subdir(self) -> None:
         path = self.storage._path_for("en", "HassTurnOn")
-        expected = os.path.join(
-            self._tmp.name, CUSTOM_SENTENCES_DIR_NAME, "en", f"{FILE_PREFIX}HassTurnOn.yaml"
+        expected = os.path.realpath(
+            os.path.join(
+                self._tmp.name,
+                CUSTOM_SENTENCES_DIR_NAME,
+                "en",
+                f"{FILE_PREFIX}HassTurnOn.yaml",
+            )
         )
         self.assertEqual(path, expected)
 
     def test_meta_path_for_is_dot_prefixed_sidecar(self) -> None:
         path = self.storage._meta_path_for("pl", "HassLightSet")
-        expected = os.path.join(
-            self._tmp.name,
-            CUSTOM_SENTENCES_DIR_NAME,
-            "pl",
-            f".{FILE_PREFIX}HassLightSet.meta.yaml",
+        expected = os.path.realpath(
+            os.path.join(
+                self._tmp.name,
+                CUSTOM_SENTENCES_DIR_NAME,
+                "pl",
+                f".{FILE_PREFIX}HassLightSet.meta.yaml",
+            )
         )
         self.assertEqual(path, expected)
+
+    def test_path_for_rejects_unsafe_language_or_intent(self) -> None:
+        unsafe_pairs = (
+            ("../..", "HassTurnOn"),
+            ("en/us", "HassTurnOn"),
+            (r"en\us", "HassTurnOn"),
+            ("en", "../../configuration"),
+            ("en", "Hass/TurnOn"),
+            ("en", r"Hass\TurnOn"),
+        )
+
+        for language, intent in unsafe_pairs:
+            with self.subTest(language=language, intent=intent):
+                with self.assertRaises(ValueError):
+                    self.storage._path_for(language, intent)
+
+    def test_path_for_rejects_language_symlink_outside_root(self) -> None:
+        root = os.path.join(self._tmp.name, CUSTOM_SENTENCES_DIR_NAME)
+        outside = os.path.join(self._tmp.name, "outside")
+        os.makedirs(root)
+        os.makedirs(outside)
+        os.symlink(outside, os.path.join(root, "en"))
+
+        with self.assertRaises(ValueError):
+            self.storage._path_for("en", "HassTurnOn")
 
 
 class CreateSyncWritesExpectedFilesTests(unittest.TestCase):

@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.0.11 (2026-07-12) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.0.12 (2026-08-20) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
@@ -1569,14 +1569,14 @@ class HASentenceManager extends HTMLElement {
             </div>
           </div>
           <p style="font-size:11px;color:var(--bento-text-muted);margin-top:8px;">
-            ℹ️ ${haData._detectedViaAPI ? (this._lang === 'pl' ? 'Wykryte przez Conversation API' : 'Detected via Conversation API') : (this._lang === 'pl' ? 'Język:' : 'Language:') + ` ${haData.language || lang}`}
-            ${haData._sourceFile ? ` \u2022 Plik: ${haData._sourceFile}` : ''}
+            ℹ️ ${haData._detectedViaAPI ? (this._lang === 'pl' ? 'Wykryte przez Conversation API' : 'Detected via Conversation API') : (this._lang === 'pl' ? 'Język:' : 'Language:') + ` ${_esc(haData.language || lang)}`}
+            ${haData._sourceFile ? ` \u2022 Plik: ${_esc(haData._sourceFile)}` : ''}
           </p>
         </div>
         <div class="ha-sentences-detail">
           ${categoryEntries.map(([cat, catIntents]) => `
             <div class="category-section" style="margin-bottom:20px;">
-              <h3 class="category-header" style="font-size:15px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bento-border);">${cat}
+              <h3 class="category-header" style="font-size:15px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bento-border);">${_esc(cat)}
                 <span style="font-size:11px;color:var(--bento-text-muted);font-weight:400;margin-left:8px;">${catIntents.length} ${this._lang === 'pl' ? (catIntents.length === 1 ? 'intent' : 'intentów') : (catIntents.length === 1 ? 'intent' : 'intents')}</span>
               </h3>
               ${catIntents.map(([name, sentences]) => `
@@ -1586,7 +1586,7 @@ class HASentenceManager extends HTMLElement {
                     <span class="badge badge-info">${sentences.length} ${this._lang === 'pl' ? 'zdań' : 'sentences'}</span>
                     <span class="toggle-arrow" style="margin-left:auto;font-size:12px;color:var(--bento-text-muted);">\u25BC</span>
                   </div>
-                  <div class="intent-sentences" data-intent-body="${name}">
+                  <div class="intent-sentences" data-intent-body="${_esc(name)}">
                     ${sentences.map(s => `<div class="ha-sentence-item"><code>${this._escapeHtml(s)}</code></div>`).join('')}
                   </div>
                 </div>
@@ -2114,7 +2114,8 @@ class HASentenceManager extends HTMLElement {
     this.shadowRoot.querySelectorAll('[data-toggle-intent]').forEach(header => {
       header.addEventListener('click', () => {
         const intentName = header.dataset.toggleIntent;
-        const body = this.shadowRoot.querySelector(`[data-intent-body="${intentName}"]`);
+        const body = [...this.shadowRoot.querySelectorAll('[data-intent-body]')]
+          .find(element => element.dataset.intentBody === intentName);
         const arrow = header.querySelector('.toggle-arrow');
         if (body) {
           const isHidden = body.style.display === 'none';

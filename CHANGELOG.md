@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.0.12 (2026-08-20)
+
+- Security: reject traversal components and symlink escapes before sentence or
+  metadata paths are read, written, or removed outside `custom_sentences/`.
+- Security: escape source filenames, category names, intent attributes, and
+  language values before interpolating them into the bundled card's HTML.
+
 ## 5.0.11 (2026-07-18)
 
 - Fix (UI): the small accent dot before section titles no longer detaches from the title text (it was pushed to the opposite edge by the header's flex space-between); it is now pinned next to the title.
