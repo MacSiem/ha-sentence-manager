@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.0.13 (2026-08-21)
+
+- Security: escaped exported YAML before placing it in a textarea and escaped the configured language in all generated markup.
+- Compatibility: raised the Home Assistant floor to 2024.7 for the static-path and config-flow APIs used at import/setup time.
+- Performance: moved the bundled-card filesystem stat off the event loop.
+
 ## 5.0.12 (2026-08-20)
 
 - Security: reject traversal components and symlink escapes before sentence or

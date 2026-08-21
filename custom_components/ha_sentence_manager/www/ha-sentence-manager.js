@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.0.12 (2026-08-20) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.0.13 (2026-08-21) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
@@ -1515,7 +1515,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   _renderHaSentencesTab() {
-    const lang = this.config.language || 'pl';
+    const lang = _esc(this.config.language || 'pl');
     const isActive = this.currentTab === 'ha-sentences';
 
     // If we have parsed sentences (loaded from file via PowerShell deploy)
@@ -1963,7 +1963,7 @@ class HASentenceManager extends HTMLElement {
 
           <div class="export-container">
             <h3>Export as YAML</h3>
-            <textarea id="yaml-output" class="yaml-editor" readonly>${this.exportAsYaml()}</textarea>
+            <textarea id="yaml-output" class="yaml-editor" readonly>${_esc(this.exportAsYaml())}</textarea>
             <button class="btn btn-primary" id="copy-yaml-btn">Copy to Clipboard</button>
           </div>
 
