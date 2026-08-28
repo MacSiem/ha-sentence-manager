@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.14 (2026-08-28)
+
+- Isolation: Bento CSS is component-local and cannot be captured from `window.HAToolsBentoCSS` by load order.
+- Isolation: removed the document-wide sibling-card injector and shared global escape-helper references.
+- Security: card and editor use local String-before-escape helpers.
+- Tests: block regressions in both packaged UI paths.
+- Security: restrict `ha_sentence_manager.reload` to Home Assistant administrators.
+
 ## 5.0.13 (2026-08-21)
 
 - Security: escaped exported YAML before placing it in a textarea and escaped the configured language in all generated markup.

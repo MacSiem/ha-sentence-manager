@@ -47,6 +47,31 @@ class CardEscapingTests(unittest.TestCase):
         )
         self.assertEqual(hacs["homeassistant"], "2024.7.0")
 
+    def test_card_does_not_install_cross_card_injectors(self) -> None:
+        source = CARD_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("const _esc = (s) => _escBase(_asText(s));", source)
+        self.assertIn("const _esc = (s) => _editorEscBase(String(s ?? ''));", source)
+        for marker in ("SPLIT_TAGS", "deepFindAll", "injectAll", "__haToolsSplitDonateInjector", "window._haToolsEsc"):
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, source)
+
+    def test_reload_service_is_admin_only(self) -> None:
+        init_source = INIT_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "from homeassistant.helpers.service import async_register_admin_service",
+            init_source,
+        )
+        self.assertIn(
+            'async_register_admin_service(hass, DOMAIN, "reload", _handle_reload)',
+            init_source,
+        )
+        self.assertNotIn(
+            'hass.services.async_register(DOMAIN, "reload", _handle_reload)',
+            init_source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

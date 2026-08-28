@@ -16,6 +16,7 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers.service import async_register_admin_service
 
 from .const import DOMAIN
 from .storage import SentenceStorage
@@ -52,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "conversation", "reload", {}, blocking=True
         )
 
-    hass.services.async_register(DOMAIN, "reload", _handle_reload)
+    async_register_admin_service(hass, DOMAIN, "reload", _handle_reload)
 
     _LOGGER.debug("HA Sentence Manager set up (entry_id=%s)", entry.entry_id)
     return True
