@@ -38,9 +38,16 @@ jobs:
           pip install $(python - <<'PY'
           import json, os, homeassistant
           base = os.path.join(os.path.dirname(homeassistant.__file__), "components")
-          reqs = set()
-          for name in ("conversation", "ffmpeg", "frontend", "homeassistant", "http", "lovelace", "panel_custom", "tts", "websocket_api"):
-              reqs.update(json.load(open(os.path.join(base, name, "manifest.json"))).get("requirements", []))
+          reqs, seen = set(), set()
+          pending = ["assist_pipeline", "conversation", "frontend", "homeassistant", "http", "lovelace", "panel_custom", "websocket_api"]
+          while pending:
+              name = pending.pop()
+              if name in seen:
+                  continue
+              seen.add(name)
+              manifest = json.load(open(os.path.join(base, name, "manifest.json")))
+              reqs.update(manifest.get("requirements", []))
+              pending.extend(manifest.get("dependencies", []))
           print(" ".join(sorted(reqs)))
           PY
           )
