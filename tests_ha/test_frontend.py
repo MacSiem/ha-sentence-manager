@@ -28,7 +28,7 @@ async def _setup(hass: HomeAssistant) -> MockConfigEntry:
 async def test_fresh_setup_registers_one_resource_and_admin_panel(hass: HomeAssistant) -> None:
     await _setup(hass)
     resources = list(hass.data["lovelace"].resources.async_items())
-    assert [(item["url"], item["res_type"]) for item in resources] == [
+    assert [(item["url"], item["type"]) for item in resources] == [
         (f"{CARD_URL}?v={VERSION}", "module")
     ]
     panel = hass.data[frontend.DATA_PANELS][PANEL_URL_PATH]
