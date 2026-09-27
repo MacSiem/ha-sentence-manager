@@ -9,6 +9,8 @@
     "conversation",
     "frontend",
     "http",
+    "lovelace",
+    "panel_custom",
     "websocket_api"
   ],
   "documentation": "https://github.com/MacSiem/ha-sentence-manager",

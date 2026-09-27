@@ -8,31 +8,30 @@ served and registered automatically.
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 
-from homeassistant.components.frontend import add_extra_js_url
-from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.service import async_register_admin_service
 
 from .const import DOMAIN
+from .frontend import (
+    async_register_card,
+    async_register_panel,
+    async_register_static,
+    async_unregister_card,
+    async_unregister_panel,
+)
 from .storage import SentenceStorage
 from .websocket_api import async_register_commands
 
 _LOGGER = logging.getLogger(__name__)
 
-# URL the integration registers for the bundled Lovelace card.
-_CARD_URL_PATH = "/ha_sentence_manager/ha-sentence-manager.js"
-_CARD_FILENAME = "ha-sentence-manager.js"
-_CARD_PACKAGE_DIR = "www"
-
 # Sentinels under hass.data so we register the static path / JS url and
 # the websocket commands at most once per HA process even across
 # config-entry reloads (HA's websocket_api raises on duplicate names).
 _FRONTEND_REGISTERED = "_frontend_registered"
+_PANEL_REGISTERED = "_panel_registered"
 _WS_REGISTERED = "_ws_registered"
 
 
@@ -45,7 +44,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_register_commands(hass)
         bucket[_WS_REGISTERED] = True
 
-    await _async_register_frontend(hass)
+    if not bucket.get(_FRONTEND_REGISTERED):
+        await async_register_static(hass)
+        await async_register_card(hass)
+        bucket[_FRONTEND_REGISTERED] = True
+    if not bucket.get(_PANEL_REGISTERED):
+        bucket[_PANEL_REGISTERED] = await async_register_panel(hass)
 
     async def _handle_reload(_: ServiceCall) -> None:
         """Service callback: ask the conversation integration to reload."""
@@ -62,66 +66,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload the config entry.
 
-    Static paths and extra-JS-URL registrations stay in place — HA does
-    not expose a stable public deregister API, and they cost nothing if
-    the integration is reinstalled later.
+    Remove owned resource and sidebar panel; the static path remains safe to
+    reuse if this integration is reinstalled in the same HA process.
     """
     hass.services.async_remove(DOMAIN, "reload")
     bucket = hass.data.get(DOMAIN, {})
     bucket.pop("storage", None)
+    if bucket.pop(_PANEL_REGISTERED, False):
+        async_unregister_panel(hass)
+    if bucket.pop(_FRONTEND_REGISTERED, False):
+        await async_unregister_card(hass)
     _LOGGER.debug("HA Sentence Manager unloaded (entry_id=%s)", entry.entry_id)
     return True
-
-
-async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Register the bundled Lovelace card so the user gets it for free.
-
-    Runs once per HA process. The static path makes the bundled JS file
-    reachable at ``_CARD_URL_PATH``; ``add_extra_js_url`` tells the HA
-    frontend to load it eagerly so the ``custom:ha-sentence-manager``
-    element is defined before any dashboard renders it.
-    """
-    bucket = hass.data.setdefault(DOMAIN, {})
-    if bucket.get(_FRONTEND_REGISTERED):
-        return
-
-    card_path = os.path.join(
-        os.path.dirname(__file__), _CARD_PACKAGE_DIR, _CARD_FILENAME
-    )
-    if not await hass.async_add_executor_job(os.path.isfile, card_path):
-        _LOGGER.error(
-            "Bundled card file missing at %s; card will not load", card_path
-        )
-        return
-
-    try:
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(_CARD_URL_PATH, card_path, cache_headers=True)]
-        )
-    except Exception as err:  # pragma: no cover - defensive
-        _LOGGER.exception(
-            "Failed to register static path %s -> %s: %s",
-            _CARD_URL_PATH,
-            card_path,
-            err,
-        )
-        return
-
-    # Cache-bust the URL on integration upgrades.
-    version_suffix = ""
-    try:
-        # Non-blocking: HA's loader caches integration metadata (reading the
-        # manifest with open() here runs inside the event loop and triggers
-        # HA's blocking-call warning).
-        from homeassistant.loader import async_get_integration
-
-        integration = await async_get_integration(hass, DOMAIN)
-        version_suffix = f"?v={integration.version or '0'}"
-    except Exception:  # pragma: no cover - non-fatal
-        version_suffix = ""
-
-    add_extra_js_url(hass, f"{_CARD_URL_PATH}{version_suffix}")
-    bucket[_FRONTEND_REGISTERED] = True
-    _LOGGER.debug(
-        "Registered Lovelace card at %s (file=%s)", _CARD_URL_PATH, card_path
-    )

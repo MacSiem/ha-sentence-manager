@@ -4,14 +4,14 @@
 
 Manage Home Assistant Assist custom sentences (intents, slots, responses) from a Lovelace card. Sentences are persisted server-side in Home Assistant's official `custom_sentences/<language>/` directory by a bundled Python integration — not in browser storage.
 
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.7+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Version](https://img.shields.io/github/v/release/MacSiem/ha-sentence-manager)](https://github.com/MacSiem/ha-sentence-manager/releases)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Version](https://img.shields.io/github/v/release/MacSiem/ha-sentence-manager)](https://github.com/MacSiem/ha-sentence-manager/releases)
 
 ## How it works
 
 **Short version: install the integration, add the card, edit sentences.**
 
 1. **Server-side storage.** Every sentence is one entry in a YAML file at `<config>/custom_sentences/<lang>/ha_sentence_manager_<intent>.yaml` — HA's own location for Assist custom sentences, so it's covered by standard HA backups and shared across every browser/device.
-2. **The card is bundled and auto-registered.** The integration serves `ha-sentence-manager.js` as a static path and calls `add_extra_js_url` on setup, so `custom:ha-sentence-manager` is available without adding a Lovelace resource entry.
+2. **The card is bundled and auto-registered.** The integration serves `ha-sentence-manager.js`, registers one Lovelace resource in storage mode and an administrator-only sidebar panel. YAML mode uses Home Assistant's frontend fallback.
 3. **Stable ids without polluting the schema.** Each entry gets an opaque id (`<lang>:<intent>:<hex8>`) tracked in a sidecar `.ha_sentence_manager_<intent>.meta.yaml` file. The main YAML stays a plain HA `custom_sentences` file — no extra keys — so hand-editing it is safe; ids are regenerated and re-synced on the next read if the sidecar is missing or out of step.
 4. **Auto-reload.** Every create/update/delete calls `conversation.reload` so edits take effect immediately, without a HA restart.
 5. **Read is open, write is admin-only.** The `ha_sentence_manager/list` WebSocket command has no admin requirement, so the card renders and is browsable for every logged-in user. `create` / `update` / `delete` / `reload` are decorated with `@websocket_api.require_admin` because they change HA's conversation configuration on disk.
@@ -39,7 +39,7 @@ Manage Home Assistant Assist custom sentences (intents, slots, responses) from a
 1. Open HACS → Integrations → ⋮ → **Custom repositories**. Add `https://github.com/MacSiem/ha-sentence-manager` with category **Integration**.
 2. Install **HA Sentence Manager** and **restart Home Assistant**.
 3. **Settings → Devices & services → Add Integration → HA Sentence Manager.**
-4. The Lovelace card is registered automatically — add it to a dashboard.
+4. Administrators can open **Sentence Manager** in the sidebar. The Lovelace card is registered automatically — add `type: custom:ha-sentence-manager` to a dashboard if preferred.
 
 If you previously installed v4 as a Lovelace plugin, remove the old `/local/community/ha-sentence-manager/ha-sentence-manager.js` resource entry under *Dashboards → Resources* — it's superseded by the integration-served `/ha_sentence_manager/ha-sentence-manager.js`.
 

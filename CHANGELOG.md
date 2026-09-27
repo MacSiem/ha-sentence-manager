@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Register one storage-mode Lovelace resource and an administrator-only sidebar panel; keep an existing HACS resource, refresh the owned resource on upgrade and remove owned UI entries on unload. YAML mode retains the frontend fallback.
+- Require Home Assistant 2025.2 for Lovelace resource and panel APIs.
 - Write sentence YAML and sidecar files through a synced temporary file and atomic replace, preserving the old file on interrupted serialization.
 - Send a YAML revision with each card row and reject update/delete when the file changed since that read. The card keeps the edit visible for review after a conflict.
 

@@ -38,14 +38,14 @@ class CardEscapingTests(unittest.TestCase):
         self.assertIn("const lang = _esc(this.config.language || 'pl');", source)
 
     def test_frontend_stat_and_declared_floor_match_used_apis(self) -> None:
-        init_source = INIT_PATH.read_text(encoding="utf-8")
+        frontend_source = (ROOT / "custom_components/ha_sentence_manager/frontend.py").read_text(encoding="utf-8")
         hacs = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))
 
         self.assertIn(
-            "await hass.async_add_executor_job(os.path.isfile, card_path)",
-            init_source,
+            "await hass.async_add_executor_job((www / CARD_FILENAME).is_file)",
+            frontend_source,
         )
-        self.assertEqual(hacs["homeassistant"], "2024.7.0")
+        self.assertEqual(hacs["homeassistant"], "2025.2.0")
 
     def test_card_does_not_install_cross_card_injectors(self) -> None:
         source = CARD_PATH.read_text(encoding="utf-8")
