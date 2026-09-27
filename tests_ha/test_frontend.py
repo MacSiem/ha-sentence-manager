@@ -16,6 +16,7 @@ from custom_components.ha_sentence_manager.const import (
 
 
 async def _setup(hass: HomeAssistant) -> MockConfigEntry:
+    assert await async_setup_component(hass, "homeassistant", {})
     assert await async_setup_component(hass, "http", {})
     assert await async_setup_component(hass, "lovelace", {})
     entry = MockConfigEntry(domain=DOMAIN, data={}, unique_id=DOMAIN)

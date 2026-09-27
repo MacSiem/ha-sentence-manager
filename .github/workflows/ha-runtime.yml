@@ -22,7 +22,7 @@ jobs:
           import json, os, homeassistant
           base = os.path.join(os.path.dirname(homeassistant.__file__), "components")
           reqs = set()
-          for name in ("conversation", "frontend", "http", "lovelace", "panel_custom", "websocket_api"):
+          for name in ("conversation", "frontend", "homeassistant", "http", "lovelace", "panel_custom", "websocket_api"):
               reqs.update(json.load(open(os.path.join(base, name, "manifest.json"))).get("requirements", []))
           print(" ".join(sorted(reqs)))
           PY
