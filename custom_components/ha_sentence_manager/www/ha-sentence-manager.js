@@ -793,13 +793,13 @@ class HASentenceManager extends HTMLElement {
     if (!this._hass) throw new Error('Home Assistant connection not ready');
     return await this._hass.callWS({ type: 'ha_sentence_manager/create', ...payload });
   }
-  async _apiUpdate(sentence_id, patch) {
+  async _apiUpdate(sentence_id, patch, revision) {
     if (!this._hass) throw new Error('Home Assistant connection not ready');
-    return await this._hass.callWS({ type: 'ha_sentence_manager/update', sentence_id, patch });
+    return await this._hass.callWS({ type: 'ha_sentence_manager/update', sentence_id, patch, revision });
   }
-  async _apiDelete(sentence_id) {
+  async _apiDelete(sentence_id, revision) {
     if (!this._hass) throw new Error('Home Assistant connection not ready');
-    return await this._hass.callWS({ type: 'ha_sentence_manager/delete', sentence_id });
+    return await this._hass.callWS({ type: 'ha_sentence_manager/delete', sentence_id, revision });
   }
   async _apiReload() {
     if (!this._hass) return;
@@ -816,6 +816,7 @@ class HASentenceManager extends HTMLElement {
     const items = await this._apiList(this._currentLanguage || null);
     this.sentences = items.map(item => ({
       id: item.id,
+      revision: item.revision,
       language: item.language,
       intent: item.intent,
       trigger: (item.sentences && item.sentences[0]) || '',
@@ -1107,6 +1108,7 @@ class HASentenceManager extends HTMLElement {
       if (this.editingId !== null) {
         // Update: replace this row's trigger but keep sibling sentences if any.
         const existing = this.sentences.find(s => s.id === this.editingId);
+        if (!existing?.revision) throw new Error(this._lang === 'pl' ? 'Odśwież listę zdań przed edycją' : 'Reload sentences before editing');
         const all = existing ? existing._allSentences.slice() : [];
         if (all.length === 0) all.push(trigger);
         else all[0] = trigger; // first phrase is the canonical one in v5.0 UI
@@ -1114,7 +1116,7 @@ class HASentenceManager extends HTMLElement {
           sentences: all,
           slots,
           response,
-        });
+        }, existing.revision);
         if (res && res.ok === false) {
           throw new Error(this._lang === 'pl' ? 'serwer nie znalazł zdania do aktualizacji' : 'server could not find the sentence to update');
         }
@@ -1161,6 +1163,10 @@ class HASentenceManager extends HTMLElement {
       this.editingIndex = this.sentences.indexOf(sentence);
     }
     if (!sentence) return;
+    if (!sentence.revision) {
+      this.showNotification(this._lang === 'pl' ? 'Odśwież listę zdań przed usunięciem' : 'Reload sentences before deleting', 'error');
+      return;
+    }
     this.editingId = sentence.id;
     this.shadowRoot.querySelector('#trigger-input').value = sentence.trigger;
     this.shadowRoot.querySelector('#intent-input').value = sentence.intent;
@@ -1193,7 +1199,7 @@ class HASentenceManager extends HTMLElement {
     const promptText = this._lang === 'pl' ? 'Usunąć to zdanie?' : 'Delete this sentence?';
     if (!confirm(promptText)) return;
     try {
-      const res = await this._apiDelete(sentence.id);
+      const res = await this._apiDelete(sentence.id, sentence.revision);
       if (res && res.ok === false) {
         throw new Error(this._lang === 'pl' ? 'serwer nie znalazł zdania do usunięcia' : 'server could not find the sentence to delete');
       }

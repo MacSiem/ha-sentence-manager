@@ -15,6 +15,7 @@ Manage Home Assistant Assist custom sentences (intents, slots, responses) from a
 3. **Stable ids without polluting the schema.** Each entry gets an opaque id (`<lang>:<intent>:<hex8>`) tracked in a sidecar `.ha_sentence_manager_<intent>.meta.yaml` file. The main YAML stays a plain HA `custom_sentences` file — no extra keys — so hand-editing it is safe; ids are regenerated and re-synced on the next read if the sidecar is missing or out of step.
 4. **Auto-reload.** Every create/update/delete calls `conversation.reload` so edits take effect immediately, without a HA restart.
 5. **Read is open, write is admin-only.** The `ha_sentence_manager/list` WebSocket command has no admin requirement, so the card renders and is browsable for every logged-in user. `create` / `update` / `delete` / `reload` are decorated with `@websocket_api.require_admin` because they change HA's conversation configuration on disk.
+6. **Concurrent edits are checked.** The card sends the YAML file revision with update/delete requests. If the file changed after you opened the card, the server rejects the stale request so you can reload and review the newer text. Writes use a temporary file and atomic replace, keeping the previous YAML intact if serialization fails.
 
 ### What is automatic vs. manual
 

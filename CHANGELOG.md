@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Write sentence YAML and sidecar files through a synced temporary file and atomic replace, preserving the old file on interrupted serialization.
+- Send a YAML revision with each card row and reject update/delete when the file changed since that read. The card keeps the edit visible for review after a conflict.
+
 ## 5.0.14 (2026-08-28)
 
 - Isolation: Bento CSS is component-local and cannot be captured from `window.HAToolsBentoCSS` by load order.

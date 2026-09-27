@@ -24,8 +24,11 @@ than raising.
 from __future__ import annotations
 
 import glob
+import hashlib
 import logging
 import os
+import stat
+import tempfile
 import uuid
 from typing import Any
 
@@ -38,6 +41,11 @@ from .const import CUSTOM_SENTENCES_DIR_NAME, FILE_PREFIX
 _LOGGER = logging.getLogger(__name__)
 
 _META_FILE_PREFIX = "."
+_ANY_REVISION = object()
+
+
+class SentenceConflictError(RuntimeError):
+    """The YAML file changed since the card last read it."""
 
 
 class SentenceStorage:
@@ -100,7 +108,7 @@ class SentenceStorage:
         )
         return sentence_id
 
-    async def update(self, sentence_id: str, patch: dict[str, Any]) -> bool:
+    async def update(self, sentence_id: str, patch: dict[str, Any], revision: str) -> bool:
         """Apply ``patch`` (sentences / slots / response) to an existing entry."""
         if "language" in patch or "intent" in patch:
             _LOGGER.warning(
@@ -112,17 +120,17 @@ class SentenceStorage:
             return False
         lang, intent, _ = parsed
         return await self.hass.async_add_executor_job(
-            self._update_sync, lang, intent, sentence_id, patch
+            self._update_sync, lang, intent, sentence_id, patch, revision
         )
 
-    async def delete(self, sentence_id: str) -> bool:
+    async def delete(self, sentence_id: str, revision: str) -> bool:
         """Remove an entry; drop the file (and sidecar) if it ends up empty."""
         parsed = self._parse_id(sentence_id)
         if parsed is None:
             return False
         lang, intent, _ = parsed
         return await self.hass.async_add_executor_job(
-            self._delete_sync, lang, intent, sentence_id
+            self._delete_sync, lang, intent, sentence_id, revision
         )
 
     # ---------------------------------------------------------------- path helpers
@@ -193,32 +201,62 @@ class SentenceStorage:
 
     # ---------------------------------------------------------------- yaml helpers
 
-    def _safe_load(self, path: str) -> dict[str, Any] | None:
-        """Load a YAML file, returning ``None`` on missing/corrupt files."""
+    @staticmethod
+    def _file_revision(path: str) -> str | None:
         try:
-            with open(path, encoding="utf-8") as handle:
-                loaded = yaml.safe_load(handle)
+            with open(path, "rb") as handle:
+                return hashlib.sha256(handle.read()).hexdigest()
         except FileNotFoundError:
             return None
+
+    def _load_with_revision(self, path: str) -> tuple[dict[str, Any] | None, str | None]:
+        """Parse the same bytes whose digest is sent to the card."""
+        try:
+            with open(path, "rb") as handle:
+                raw = handle.read()
+            loaded = yaml.safe_load(raw)
+        except FileNotFoundError:
+            return None, None
         except (yaml.YAMLError, OSError) as err:
             _LOGGER.warning("Failed to load %s: %s", path, err)
-            return None
+            return None, None
         if not isinstance(loaded, dict):
             _LOGGER.warning("Unexpected top-level YAML shape in %s", path)
-            return None
-        return loaded
+            return None, None
+        return loaded, hashlib.sha256(raw).hexdigest()
 
-    def _dump(self, path: str, data: dict[str, Any]) -> None:
+    def _safe_load(self, path: str) -> dict[str, Any] | None:
+        """Load a YAML file, returning ``None`` on missing/corrupt files."""
+        return self._load_with_revision(path)[0]
+
+    def _dump(self, path: str, data: dict[str, Any], expected_revision: str | None | object = _ANY_REVISION) -> None:
         """Atomically rewrite a YAML file with the supplied data."""
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as handle:
-            yaml.safe_dump(
-                data,
-                handle,
-                default_flow_style=False,
-                sort_keys=False,
-                allow_unicode=True,
-            )
+        directory = os.path.dirname(path)
+        os.makedirs(directory, exist_ok=True)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=directory,
+                prefix=f".{os.path.basename(path)}.", suffix=".tmp", delete=False,
+            ) as handle:
+                temporary = handle.name
+                try:
+                    os.fchmod(handle.fileno(), stat.S_IMODE(os.stat(path).st_mode))
+                except FileNotFoundError:
+                    pass
+                yaml.safe_dump(
+                    data, handle, default_flow_style=False,
+                    sort_keys=False, allow_unicode=True,
+                )
+                handle.flush()
+                os.fsync(handle.fileno())
+            if expected_revision is not _ANY_REVISION and self._file_revision(path) != expected_revision:
+                raise SentenceConflictError("sentence YAML changed during save; reload before retrying")
+            os.replace(temporary, path)
+            temporary = None
+        finally:
+            if temporary is not None:
+                os.unlink(temporary)
 
     # ---------------------------------------------------------------- metadata helpers
 
@@ -314,7 +352,7 @@ class SentenceStorage:
         for lang in languages:
             pattern = os.path.join(self._lang_dir(lang), f"{FILE_PREFIX}*.yaml")
             for path in sorted(glob.glob(pattern)):
-                loaded = self._safe_load(path)
+                loaded, revision = self._load_with_revision(path)
                 if not loaded:
                     continue
                 intents = loaded.get("intents") or {}
@@ -337,6 +375,7 @@ class SentenceStorage:
                             aligned[idx], lang, str(intent), entry
                         )
                         if normalized is not None:
+                            normalized["revision"] = revision
                             out.append(normalized)
         return out
 
@@ -344,7 +383,7 @@ class SentenceStorage:
         self, language: str, intent: str, sentence_id: str
     ) -> dict[str, Any] | None:
         path = self._path_for(language, intent)
-        loaded = self._safe_load(path)
+        loaded, revision = self._load_with_revision(path)
         if not loaded:
             return None
         block = (loaded.get("intents") or {}).get(intent) or {}
@@ -362,6 +401,7 @@ class SentenceStorage:
                 continue
             normalized = self._normalize(sentence_id, language, intent, entry)
             if normalized is not None:
+                normalized["revision"] = revision
                 return normalized
         return None
 
@@ -377,7 +417,8 @@ class SentenceStorage:
         sentence_id: str,
     ) -> None:
         path = self._path_for(language, intent)
-        loaded = self._safe_load(path) or {"language": language, "intents": {}}
+        loaded, revision = self._load_with_revision(path)
+        loaded = loaded or {"language": language, "intents": {}}
         loaded.setdefault("language", language)
         intents = loaded.setdefault("intents", {})
         block = intents.setdefault(intent, {"data": []})
@@ -389,7 +430,7 @@ class SentenceStorage:
         if response:
             entry["response"] = response
         data.append(entry)
-        self._dump(path, loaded)
+        self._dump(path, loaded, expected_revision=revision)
 
         # Keep the sidecar parallel to the main file.
         meta_path = self._meta_path_for(language, intent)
@@ -406,11 +447,14 @@ class SentenceStorage:
         intent: str,
         sentence_id: str,
         patch: dict[str, Any],
+        expected_revision: str,
     ) -> bool:
         path = self._path_for(language, intent)
-        loaded = self._safe_load(path)
+        loaded, revision = self._load_with_revision(path)
         if not loaded:
             return False
+        if revision != expected_revision:
+            raise SentenceConflictError("sentence YAML changed since preview; reload before editing")
         block = (loaded.get("intents") or {}).get(intent) or {}
         data = block.get("data") or []
         if not isinstance(data, list):
@@ -443,7 +487,7 @@ class SentenceStorage:
                     entry["response"] = str(response)
                 else:
                     entry.pop("response", None)
-            self._dump(path, loaded)
+            self._dump(path, loaded, expected_revision=revision)
             if dirty:
                 self._dump_meta(meta_path, aligned)
             return True
@@ -452,12 +496,14 @@ class SentenceStorage:
         return False
 
     def _delete_sync(
-        self, language: str, intent: str, sentence_id: str
+        self, language: str, intent: str, sentence_id: str, expected_revision: str
     ) -> bool:
         path = self._path_for(language, intent)
-        loaded = self._safe_load(path)
+        loaded, revision = self._load_with_revision(path)
         if not loaded:
             return False
+        if revision != expected_revision:
+            raise SentenceConflictError("sentence YAML changed since preview; reload before deleting")
         intents = loaded.get("intents") or {}
         block = intents.get(intent) or {}
         data = block.get("data") or []
@@ -484,7 +530,7 @@ class SentenceStorage:
             block["data"] = new_data
             intents[intent] = block
             loaded["intents"] = intents
-            self._dump(path, loaded)
+            self._dump(path, loaded, expected_revision=revision)
             self._dump_meta(meta_path, new_ids)
             return True
 
@@ -492,8 +538,10 @@ class SentenceStorage:
         intents.pop(intent, None)
         if intents:
             loaded["intents"] = intents
-            self._dump(path, loaded)
+            self._dump(path, loaded, expected_revision=revision)
         else:
-            self._remove_if_exists(path)
+            if self._file_revision(path) != revision:
+                raise SentenceConflictError("sentence YAML changed during delete; reload before retrying")
+            os.remove(path)
         self._remove_if_exists(meta_path)
         return True

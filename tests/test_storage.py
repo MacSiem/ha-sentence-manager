@@ -27,6 +27,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 def _stub_homeassistant() -> None:
@@ -317,6 +318,60 @@ class CreateSyncWritesExpectedFilesTests(unittest.TestCase):
         self.assertEqual(
             meta_loaded["ids"], ["en:HassTurnOn:11111111", "en:HassTurnOn:22222222"]
         )
+
+
+class AtomicWriteTests(unittest.TestCase):
+    def test_failed_yaml_dump_leaves_previous_sentence_file_intact(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(hass=_FakeHass(root))
+            path = storage._path_for("en", "HassTurnOn")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            Path(path).write_text("language: en\nintents: {}\n", encoding="utf-8")
+
+            def interrupt(_data, handle, **_kwargs):
+                handle.write("partial YAML")
+                raise OSError("write interrupted")
+
+            with mock.patch.object(storage_module.yaml, "safe_dump", side_effect=interrupt):
+                with self.assertRaisesRegex(OSError, "write interrupted"):
+                    storage._dump(path, {"language": "en", "intents": {}})
+
+            self.assertEqual("language: en\nintents: {}\n", Path(path).read_text(encoding="utf-8"))
+            self.assertEqual([Path(path).name], [p.name for p in Path(path).parent.iterdir()])
+
+    def test_manual_yaml_edit_after_list_rejects_stale_card_update(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(hass=_FakeHass(root))
+            sentence_id = "en:HassTurnOn:deadbeef"
+            storage._create_sync("en", "HassTurnOn", ["turn on"], {}, "", sentence_id)
+            listed = storage._list_all_sync("en")
+            revision = listed[0]["revision"]
+            path = storage._path_for("en", "HassTurnOn")
+            manual = storage._safe_load(path)
+            manual["intents"]["HassTurnOn"]["data"][0]["sentences"] = ["turn on manually"]
+            Path(path).write_text(storage_module.yaml.safe_dump(manual), encoding="utf-8")
+
+            with self.assertRaises(storage_module.SentenceConflictError):
+                storage._update_sync("en", "HassTurnOn", sentence_id, {"sentences": ["turn on by card"]}, revision)
+
+            self.assertEqual(["turn on manually"], storage._safe_load(path)["intents"]["HassTurnOn"]["data"][0]["sentences"])
+
+    def test_manual_yaml_edit_after_list_rejects_stale_card_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(hass=_FakeHass(root))
+            sentence_id = "en:HassTurnOn:deadbeef"
+            storage._create_sync("en", "HassTurnOn", ["turn on"], {}, "", sentence_id)
+            revision = storage._list_all_sync("en")[0]["revision"]
+            path = storage._path_for("en", "HassTurnOn")
+            manual = storage._safe_load(path)
+            manual["intents"]["HassTurnOn"]["data"][0]["sentences"] = ["turn on manually"]
+            Path(path).write_text(storage_module.yaml.safe_dump(manual), encoding="utf-8")
+
+            with self.assertRaises(storage_module.SentenceConflictError):
+                storage._delete_sync("en", "HassTurnOn", sentence_id, revision)
+
+            self.assertTrue(Path(path).exists())
+            self.assertEqual(["turn on manually"], storage._safe_load(path)["intents"]["HassTurnOn"]["data"][0]["sentences"])
 
 
 if __name__ == "__main__":
