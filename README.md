@@ -32,7 +32,9 @@ Manage Home Assistant Assist custom sentences (intents, slots, responses) from a
 |---|---|
 | ![HA Sentences tab, light theme](docs/screenshots/card-main-light.png) | ![HA Sentences tab, dark theme](docs/screenshots/card-main-dark.png) |
 
-*The default "HA Sentences" tab: stats (intents, sentences, slot lists, categories) and the persisted sentences grouped by category. Dark mode follows your Home Assistant theme automatically.*
+*The default "HA Sentences" tab with synthetic example phrases: intent,
+sentence, slot-list and category counts, grouped by category. Dark mode
+follows your Home Assistant theme.*
 
 ## Installation
 
