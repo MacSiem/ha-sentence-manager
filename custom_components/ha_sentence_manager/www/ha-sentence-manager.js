@@ -1252,6 +1252,10 @@ class HASentenceManager extends HTMLElement {
     });
   }
 
+  _supportDismissed() {
+    try { return localStorage.getItem('ha-sentence-manager-support-dismissed') === '1'; } catch (_) { return false; }
+  }
+
   render() {
     if (!this._hass) return;
     if (!this.shadowRoot) {
@@ -1481,17 +1485,7 @@ class HASentenceManager extends HTMLElement {
 
           </div>
         
-        <!-- Support / Donation -->
-        <div class="donate-section" data-source="ha-tools-split">
-          <div class="donate-text">
-            <h3>❤️ ${this._lang === 'pl' ? 'Wesprzyj rozwój HA Tools' : 'Support HA Tools Development'}</h3>
-            <p>${this._lang === 'pl' ? 'Jeśli to narzędzie ułatwia Ci życie z Home Assistant, rozważ wsparcie projektu. Każda kawa motywuje do dalszego rozwoju!' : 'If this tool makes your Home Assistant life easier, consider supporting the project. Every coffee motivates further development!'}</p>
-          </div>
-          <div class="donate-buttons">
-            <a class="donate-btn coffee" href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">☕ Buy Me a Coffee</a>
-            <a class="donate-btn paypal" href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">💳 PayPal</a>
-          </div>
-        </div>
+        ${this._hass?.user?.is_admin && this.config?.show_support !== false && !this._supportDismissed() ? `<div class="donate-section" data-source="own-card" style="margin:8px 0;padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px"><span>❤️ ${this._lang === 'pl' ? 'Wesprzyj HA Tools:' : 'Support HA Tools:'}</span><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">Buy Me a Coffee</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto">×</button></div>` : ''}
         </div>
       `;
     }
@@ -1801,6 +1795,10 @@ class HASentenceManager extends HTMLElement {
   }
 
   attachEventListeners() {
+    this.shadowRoot.querySelector('.support-dismiss')?.addEventListener('click', () => {
+      try { localStorage.setItem('ha-sentence-manager-support-dismissed', '1'); } catch (_) {}
+      this.render();
+    });
     // Tip banner dismiss
     const _tipB = this.shadowRoot.querySelector('#tip-banner');
     if (_tipB) {
