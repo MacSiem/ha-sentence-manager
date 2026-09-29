@@ -1,7 +1,7 @@
 """Constants for the HA Sentence Manager integration."""
 
 DOMAIN = "ha_sentence_manager"
-VERSION = "5.0.14"
+VERSION = "5.0.15"
 CARD_FILENAME = "ha-sentence-manager.js"
 CARD_URL = f"/{DOMAIN}/{CARD_FILENAME}"
 STATIC_URL_BASE = f"/{DOMAIN}"
