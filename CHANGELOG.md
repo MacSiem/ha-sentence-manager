@@ -2,6 +2,8 @@
 
 ## 5.0.15 (2026-09-29)
 
+- Fill the sentence editor after rendering it, keeping trigger, intent, response and slots when opened from the selector or list; preserve the draft after a conflicting save.
+
 - Serialize sentence file and ID sidecar operations across executor threads. Concurrent editors using the same revision cannot both commit, and simultaneous creates preserve both records.
 
 - Register one storage-mode Lovelace resource and an administrator-only sidebar panel; keep an existing HACS resource, refresh the owned resource on upgrade and remove owned UI entries on unload. YAML mode retains the frontend fallback.

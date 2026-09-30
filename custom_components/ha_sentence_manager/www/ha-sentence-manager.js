@@ -1168,6 +1168,10 @@ class HASentenceManager extends HTMLElement {
       return;
     }
     this.editingId = sentence.id;
+    this.currentTab = 'editor';
+    // Build the editor before filling it: the list has no editor inputs,
+    // and rebuilding after filling would discard the selected sentence.
+    this.render();
     this.shadowRoot.querySelector('#trigger-input').value = sentence.trigger;
     this.shadowRoot.querySelector('#intent-input').value = sentence.intent;
     this.shadowRoot.querySelector('#response-input').value = sentence.response || '';
@@ -1186,8 +1190,6 @@ class HASentenceManager extends HTMLElement {
       slotsContainer.appendChild(slotElement);
     });
 
-    this.currentTab = 'editor';
-    this.render();
     window.scrollTo(0, 0);
   }
 
