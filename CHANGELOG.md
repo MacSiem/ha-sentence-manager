@@ -2,6 +2,8 @@
 
 ## 5.0.15 (2026-09-29)
 
+- Use Home Assistant’s bundled PyYAML dependency instead of redundantly declaring it in the custom integration manifest.
+
 - Fill the sentence editor after rendering it, keeping trigger, intent, response and slots when opened from the selector or list; preserve the draft after a conflicting save.
 
 - Serialize sentence file and ID sidecar operations across executor threads. Concurrent editors using the same revision cannot both commit, and simultaneous creates preserve both records.
