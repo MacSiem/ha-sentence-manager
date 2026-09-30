@@ -21,6 +21,8 @@ Exercised behavior:
 from __future__ import annotations
 
 import importlib.util
+import concurrent.futures
+import threading
 import os
 import sys
 import tempfile
@@ -373,6 +375,76 @@ class AtomicWriteTests(unittest.TestCase):
             self.assertTrue(Path(path).exists())
             self.assertEqual(["turn on manually"], storage._safe_load(path)["intents"]["HassTurnOn"]["data"][0]["sentences"])
 
+
+
+class ConcurrentSaveTests(unittest.TestCase):
+    def _coordinate_reads(self, storage, path):
+        """Force both unguarded writers to observe the same original bytes."""
+        read_gate = threading.Barrier(2)
+        replace_gate = threading.Barrier(2)
+        load = storage._load_with_revision
+        revision = storage._file_revision
+
+        def pause(gate):
+            try:
+                gate.wait(timeout=0.2)
+            except threading.BrokenBarrierError:
+                # A serialized writer legitimately cannot reach the gate yet.
+                pass
+
+        def coordinated_load(file):
+            result = load(file)
+            if file == path:
+                pause(read_gate)
+            return result
+
+        def coordinated_revision(file):
+            result = revision(file)
+            if file == path:
+                pause(replace_gate)
+            return result
+
+        return mock.patch.object(storage, "_load_with_revision", coordinated_load), mock.patch.object(storage, "_file_revision", coordinated_revision)
+
+    def test_only_one_same_revision_update_can_commit(self):
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(_FakeHass(root))
+            sid = "en:QAStatus:12345678"
+            storage._create_sync("en", "QAStatus", ["qa phrase"], {}, "initial", sid)
+            revision = storage._list_all_sync("en")[0]["revision"]
+            path = storage._path_for("en", "QAStatus")
+
+            def writer(label):
+                try:
+                    storage._update_sync("en", "QAStatus", sid, {"response": label}, revision)
+                    return "saved", label
+                except storage_module.SentenceConflictError:
+                    return "conflict", label
+
+            load, revision_patch = self._coordinate_reads(storage, path)
+            with load, revision_patch, concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(writer, ["first", "second"]))
+            self.assertEqual(1, sum(status == "saved" for status, _ in results), results)
+            self.assertEqual(1, sum(status == "conflict" for status, _ in results), results)
+            winner = next(label for status, label in results if status == "saved")
+            self.assertEqual(winner, storage._list_all_sync("en")[0]["response"])
+
+    def test_concurrent_creates_preserve_both_sentences_and_ids(self):
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(_FakeHass(root))
+            path = storage._path_for("en", "QAStatus")
+
+            def writer(index):
+                sid = f"en:QAStatus:{index:08d}"
+                storage._create_sync("en", "QAStatus", [f"qa phrase {index}"], {}, "", sid)
+                return sid
+
+            load, revision_patch = self._coordinate_reads(storage, path)
+            with load, revision_patch, concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                ids = list(pool.map(writer, [1, 2]))
+            rows = storage._list_all_sync("en")
+            self.assertEqual(set(ids), {row["id"] for row in rows})
+            self.assertEqual({"qa phrase 1", "qa phrase 2"}, {row["sentences"][0] for row in rows})
 
 if __name__ == "__main__":
     unittest.main()
