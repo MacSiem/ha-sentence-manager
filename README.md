@@ -141,3 +141,9 @@ The card shows a small support link to administrators. It can be dismissed in th
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Privacy and data
+
+Custom sentences and associated YAML are stored on your Home Assistant server. They can contain entity names and household routines. Back up authored sentences before changes and redact YAML, utterances and entity identifiers before sharing reports.
+
+See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.
