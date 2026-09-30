@@ -2,6 +2,8 @@
 
 ## 5.0.15 (2026-09-29)
 
+- Serialize sentence file and ID sidecar operations across executor threads. Concurrent editors using the same revision cannot both commit, and simultaneous creates preserve both records.
+
 - Register one storage-mode Lovelace resource and an administrator-only sidebar panel; keep an existing HACS resource, refresh the owned resource on upgrade and remove owned UI entries on unload. YAML mode retains the frontend fallback.
 - Require Home Assistant 2025.2 for Lovelace resource and panel APIs.
 - Write sentence YAML and sidecar files through a synced temporary file and atomic replace, preserving the old file on interrupted serialization.

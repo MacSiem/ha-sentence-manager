@@ -24,11 +24,13 @@ than raising.
 from __future__ import annotations
 
 import glob
+from functools import wraps
 import hashlib
 import logging
 import os
 import stat
 import tempfile
+import threading
 import uuid
 from typing import Any
 
@@ -48,12 +50,24 @@ class SentenceConflictError(RuntimeError):
     """The YAML file changed since the card last read it."""
 
 
+def _serialized_io(method):
+    """Keep main YAML and IDs coherent across Home Assistant executor threads."""
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._io_lock:
+            return method(self, *args, **kwargs)
+    return locked
+
+
 class SentenceStorage:
     """CRUD wrapper around ``custom_sentences/<lang>/ha_sentence_manager_*.yaml``."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Bind the storage helper to a Home Assistant instance."""
         self.hass = hass
+        # Only synchronous executor work takes this lock, never the event loop.
+        # Guard the whole read/check/write, including the parallel ID sidecar.
+        self._io_lock = threading.RLock()
 
     # ---------------------------------------------------------------- public
 
@@ -336,6 +350,7 @@ class SentenceStorage:
 
     # ---------------------------------------------------------------- list / get
 
+    @_serialized_io
     def _list_all_sync(self, language: str | None) -> list[dict[str, Any]]:
         root = self._root()
         if not os.path.isdir(root):
@@ -379,6 +394,7 @@ class SentenceStorage:
                             out.append(normalized)
         return out
 
+    @_serialized_io
     def _get_one_sync(
         self, language: str, intent: str, sentence_id: str
     ) -> dict[str, Any] | None:
@@ -407,6 +423,7 @@ class SentenceStorage:
 
     # ---------------------------------------------------------------- create / update / delete
 
+    @_serialized_io
     def _create_sync(
         self,
         language: str,
@@ -441,6 +458,7 @@ class SentenceStorage:
         ids.append(sentence_id)
         self._dump_meta(meta_path, ids)
 
+    @_serialized_io
     def _update_sync(
         self,
         language: str,
@@ -495,6 +513,7 @@ class SentenceStorage:
             self._dump_meta(meta_path, aligned)
         return False
 
+    @_serialized_io
     def _delete_sync(
         self, language: str, intent: str, sentence_id: str, expected_revision: str
     ) -> bool:
