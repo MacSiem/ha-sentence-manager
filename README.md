@@ -64,6 +64,8 @@ No options are required.
 | **Import/Export** | Exports the currently loaded sentences as a YAML text block, or bulk-imports pasted YAML (each parsed row is created individually through the same admin-only `create` command as the Editor tab). |
 | **Custom Actions** | A reference table of built-in HA Assist intents plus a form that generates a copy-pasteable automation/sentence YAML snippet. This tab does not read or write anything through the integration — nothing you fill in here is saved. |
 
+Import/Export uses the card's `custom_sentences` list format, not an arbitrary Home Assistant configuration file. Exported phrases, responses and slot values preserve quotes and colons when pasted back into Import. The HA Sentences tab separately reads the integration's persisted Assist definitions.
+
 ## Services
 
 This integration exposes no entities. It registers one service:
