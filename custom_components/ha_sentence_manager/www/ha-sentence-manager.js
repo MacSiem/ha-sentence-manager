@@ -1225,7 +1225,7 @@ class HASentenceManager extends HTMLElement {
       slotElement.innerHTML = `
         <label>${_esc(name)}:</label>
         <input type="text" class="slot-input" data-slot-name="${_esc(name)}" value="${_esc(type)}">
-        <button class="remove-slot-btn">Remove</button>
+        <button class="remove-slot-btn">${this._lang === 'pl' ? 'Usuń' : 'Remove'}</button>
       `;
       slotElement.querySelector('.remove-slot-btn').addEventListener('click', () => slotElement.remove());
       slotsContainer.appendChild(slotElement);
@@ -1266,7 +1266,7 @@ class HASentenceManager extends HTMLElement {
       slotElement.innerHTML = `
         <label>${_esc(slotName)}:</label>
         <input type="text" class="slot-input" data-slot-name="${_esc(slotName)}" placeholder="e.g., string, number, area">
-        <button class="remove-slot-btn">Remove</button>
+        <button class="remove-slot-btn">${this._lang === 'pl' ? 'Usuń' : 'Remove'}</button>
       `;
       slotElement.querySelector('.remove-slot-btn').addEventListener('click', () => slotElement.remove());
       slotsContainer.appendChild(slotElement);
@@ -1289,7 +1289,7 @@ class HASentenceManager extends HTMLElement {
       slotElement.innerHTML = `
         <label>${_esc(name)}:</label>
         <input type="text" class="slot-input" data-slot-name="${_esc(name)}" value="${_esc(type)}">
-        <button class="remove-slot-btn">Remove</button>
+        <button class="remove-slot-btn">${this._lang === 'pl' ? 'Usuń' : 'Remove'}</button>
       `;
       slotElement.querySelector('.remove-slot-btn').addEventListener('click', () => slotElement.remove());
       slotsContainer.appendChild(slotElement);
@@ -1338,7 +1338,7 @@ class HASentenceManager extends HTMLElement {
           <li><strong>Intent</strong> — ${this._lang === 'pl' ? 'nazwa akcji (np. TurnOnLight). HA mapuje intent na automatyzację.' : 'the action name (e.g., TurnOnLight). HA maps the intent to automation.'}</li>
           <li><strong>${this._lang === 'pl' ? 'Test' : 'Test'}</strong> — ${this._lang === 'pl' ? 'testuj zdania w zakładce Test — wyślij tekst do Conversation API.' : 'test sentences in the Test tab — send text to Conversation API.'}</li>
           <li><strong>${this._lang === 'pl' ? 'Import/Eksport' : 'Import/Export'}</strong> — ${this._lang === 'pl' ? 'eksportuj do YAML, importuj wklejony YAML.' : 'export to YAML, import pasted YAML.'}</li>
-          <li><strong>${this._lang === 'pl' ? 'Przykład:' : 'Example:'}</strong> <code>${this._lang === 'pl' ? '[włącz|zapal] [światło|lampę]' : '[turn on|light] [light|lamp]'} w/in {room}</code></li>
+          <li><strong>${this._lang === 'pl' ? 'Przykład:' : 'Example:'}</strong> <code>${this._lang === 'pl' ? '[włącz|zapal] [światło|lampę]' : '[turn on|light] [light|lamp]'} ${this._lang === 'pl' ? 'w' : 'in'} {room}</code></li>
         </ul>
       </div>
 
@@ -1537,7 +1537,7 @@ class HASentenceManager extends HTMLElement {
     return `
       <div class="tab-panel ${isActive ? 'active' : ''}" data-tab-content="ha-sentences">
         <div class="ha-sentences-section">
-          <h2>🏠 HA Custom Sentences</h2>
+          <h2>🏠 ${this._lang === 'pl' ? 'Własne zdania HA' : 'HA Custom Sentences'}</h2>
           <p class="section-desc">${this._lang === 'pl' ? 'Niestandardowe komendy głosowe skonfigurowane w Home Assistant.' : 'Custom voice commands configured in Home Assistant.'}</p>
           ${contentHtml}
           <div style="margin-top:20px;padding:16px;background:var(--bento-bg,#f8fafc);border:1px solid var(--bento-border,#e2e8f0);border-radius:10px">
@@ -1997,7 +1997,7 @@ class HASentenceManager extends HTMLElement {
       const textarea = this.shadowRoot.querySelector('#yaml-output');
       textarea.select();
       document.execCommand('copy');
-      this.showNotification('YAML copied to clipboard', 'success');
+      this.showNotification(this._lang === 'pl' ? 'YAML skopiowany do schowka' : 'YAML copied to clipboard', 'success');
     });
 
     this.shadowRoot.querySelector('#import-yaml-btn')?.addEventListener('click', () => {
@@ -2005,7 +2005,7 @@ class HASentenceManager extends HTMLElement {
       if (yaml.trim()) {
         this.importFromYaml(yaml);
       } else {
-        this.showNotification('Paste YAML first', 'error');
+        this.showNotification(this._lang === 'pl' ? 'Najpierw wklej YAML' : 'Paste YAML first', 'error');
       }
     });
   }
@@ -3233,8 +3233,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'Fraza wywołująca (EN)' : 'Trigger phrase (EN)'}</label><input type="text" id="action-trigger-en" placeholder="e.g. turn on movie mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
     html += '</div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">';
-    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'Usługa HA' : 'HA Service'}</label><input type="text" id="action-service" placeholder="np. scene.turn_on, script.movie_mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
-    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'ID encji' : 'Entity ID'}</label><input type="text" id="action-entity" placeholder="np. scene.movie_mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
+    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'Usługa HA' : 'HA Service'}</label><input type="text" id="action-service" placeholder="${this._lang === 'pl' ? 'np.' : 'e.g.,'} scene.turn_on, script.movie_mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
+    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'ID encji' : 'Entity ID'}</label><input type="text" id="action-entity" placeholder="${this._lang === 'pl' ? 'np.' : 'e.g.,'} scene.movie_mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
     html += '</div>';
     html += `<button class="btn-primary" id="btn-generate-action" style="margin-top:8px;">📝 ${this._lang === 'pl' ? 'Generuj YAML' : 'Generate YAML'}</button>`;
     html += '</div>';
@@ -3248,7 +3248,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 
     // Saved custom actions list
     if (customActions.length > 0) {
-      html += '<div class="section-title" style="margin-top:24px;">💾 Saved Actions (' + customActions.length + ')</div>';
+      html += '<div class="section-title" style="margin-top:24px;">💾 ' + (this._lang === 'pl' ? 'Zapisane akcje' : 'Saved Actions') + ' (' + customActions.length + ')</div>';
       customActions.forEach((a, idx) => {
         html += `<div style="padding:10px 14px;background:var(--bento-bg,#f8fafc);border:1px solid var(--bento-border,#e2e8f0);border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"><div><strong style="font-size:13px;">"${_esc(a.trigger)}"</strong> <span style="font-size:12px;color:var(--bento-text-secondary,#64748b);">⚡ ${_esc(a.service)} (${_esc(a.entity)})</span></div><button class="btn-danger-sm" data-remove-action="${idx}" style="padding:4px 10px;font-size:11px;border-radius:6px;background:var(--bento-error,#ef4444);color:white;border:none;cursor:pointer;">🗑️</button></div>`;
       });
