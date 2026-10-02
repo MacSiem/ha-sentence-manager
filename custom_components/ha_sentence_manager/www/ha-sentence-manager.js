@@ -582,6 +582,8 @@ class HASentenceManager extends HTMLElement {
     } catch (e) {}
 
     if (hass?.language) this._lang = hass.language.startsWith('pl') ? 'pl' : 'en';    const prevHass = this._hass;
+    const permissionsChanged = this._sentenceAdmin !== (hass?.user?.is_admin === true);
+    this._sentenceAdmin = hass?.user?.is_admin === true;
     this._hass = hass;
     if (!hass) return;
     if (!this._sentencesLoaded) {
@@ -600,6 +602,7 @@ class HASentenceManager extends HTMLElement {
       }
       return;
     }
+    if (permissionsChanged) this.render();
     // Only re-render on hass update if entities actually changed
     // Sentence Manager has no entity dependencies — skip re-render on hass updates
     // Re-rendering is handled explicitly by user actions (tab switch, save, etc.)
@@ -777,6 +780,22 @@ class HASentenceManager extends HTMLElement {
   // Sentences live in HA's `custom_sentences/<lang>/ha_sentence_manager_<intent>.yaml`.
   // No browser localStorage for application data: every create/update/delete
   // round-trips through the companion Python integration, which is the source of truth.
+  _canManageSentences() { return this._hass?.user?.is_admin === true; }
+
+  _sentenceAdminMessage() {
+    return this._lang === 'pl'
+      ? 'Tylko administrator może tworzyć, zmieniać i usuwać zdania. Możesz przeglądać oraz eksportować zapisane zdania.'
+      : 'Only an administrator can create, change or delete sentences. You can view and export saved sentences.';
+  }
+
+  _requireSentenceAdmin() {
+    if (!this._canManageSentences()) throw new Error(this._sentenceAdminMessage());
+  }
+
+  _sentenceReadOnlyNotice() {
+    return `<div role="status" style="padding:16px;line-height:1.6;color:var(--bento-text-secondary,#64748b);">${_esc(this._sentenceAdminMessage())}</div>`;
+  }
+
   async _apiList(language = null) {
     if (!this._hass) return [];
     try {
@@ -790,18 +809,22 @@ class HASentenceManager extends HTMLElement {
     }
   }
   async _apiCreate(payload) {
+    this._requireSentenceAdmin();
     if (!this._hass) throw new Error('Home Assistant connection not ready');
     return await this._hass.callWS({ type: 'ha_sentence_manager/create', ...payload });
   }
   async _apiUpdate(sentence_id, patch, revision) {
+    this._requireSentenceAdmin();
     if (!this._hass) throw new Error('Home Assistant connection not ready');
     return await this._hass.callWS({ type: 'ha_sentence_manager/update', sentence_id, patch, revision });
   }
   async _apiDelete(sentence_id, revision) {
+    this._requireSentenceAdmin();
     if (!this._hass) throw new Error('Home Assistant connection not ready');
     return await this._hass.callWS({ type: 'ha_sentence_manager/delete', sentence_id, revision });
   }
   async _apiReload() {
+    this._requireSentenceAdmin();
     if (!this._hass) return;
     try { await this._hass.callWS({ type: 'ha_sentence_manager/reload' }); }
     catch (e) { console.warn('[ha-sentence-manager] reload failed', e); }
@@ -1025,6 +1048,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   async importFromYaml(yamlText) {
+    if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     try {
       const lines = yamlText.split('\n');
       const imported = [];
@@ -1086,6 +1110,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   async saveSentence() {
+    if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     const trigger = this.shadowRoot.querySelector('#trigger-input').value.trim();
     const intent = this.shadowRoot.querySelector('#intent-input').value.trim();
     const response = this.shadowRoot.querySelector('#response-input').value.trim();
@@ -1194,6 +1219,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   async deleteSentence(indexOrId) {
+    if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     let sentence;
     if (typeof indexOrId === 'number') sentence = this.sentences[indexOrId];
     else sentence = this.sentences.find(s => s.id === indexOrId);
@@ -1430,7 +1456,7 @@ class HASentenceManager extends HTMLElement {
           ` : ''}
         </div>
         <div class="ha-sentences-actions" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-primary" id="import-ha-btn">📥 ${this._lang === 'pl' ? 'Importuj do edytora' : 'Import to editor'}</button>
+          ${this._canManageSentences() ? `<button class="btn btn-primary" id="import-ha-btn">📥 ${this._lang === 'pl' ? 'Importuj do edytora' : 'Import to editor'}</button>` : this._sentenceReadOnlyNotice()}
           <button class="btn btn-secondary" id="reload-ha-btn">🔄 ${this._lang === 'pl' ? 'Odśwież' : 'Refresh'}</button>
         </div>
       `;
@@ -1523,6 +1549,7 @@ class HASentenceManager extends HTMLElement {
 
   // Import HA's existing custom-sentence definitions into the integration store
   async _importHaSentencesToEditor() {
+    if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     if (!this._haSentences || !this._haSentences.intents) return;
     const language = (this._currentLanguage || this._hass?.config?.language || 'en');
     const toCreate = [];
@@ -1576,6 +1603,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   renderEditor() {
+    if (!this._canManageSentences()) return this._sentenceReadOnlyNotice();
     return `
       <div class="tab-panel ${this.currentTab === 'editor' ? 'active' : ''}" data-tab-content="editor">
         <div class="editor-section">
@@ -1649,10 +1677,10 @@ class HASentenceManager extends HTMLElement {
                       <div class="sentence-trigger">${this.highlightSlots(s.trigger)}</div>
                       ${s.response ? `<div class="sentence-response">Response: ${_esc(s.response)}</div>` : ''}
                     </div>
-                    <div class="sentence-actions">
+                    ${this._canManageSentences() ? `<div class="sentence-actions">
                       <button class="btn btn-small" data-edit="${this.sentences.indexOf(s)}">Edit</button>
                       <button class="btn btn-small btn-danger" data-delete="${this.sentences.indexOf(s)}">Delete</button>
-                    </div>
+                    </div>` : ''}
                   </div>
                 `).join('')}
               </div>
@@ -1771,11 +1799,11 @@ class HASentenceManager extends HTMLElement {
             <button class="btn btn-primary" id="copy-yaml-btn">Copy to Clipboard</button>
           </div>
 
-          <div class="import-container">
+          ${this._canManageSentences() ? `<div class="import-container">
             <h3>Import from YAML</h3>
             <textarea id="yaml-input" class="yaml-editor" placeholder="Paste YAML here..."></textarea>
             <button class="btn btn-primary" id="import-yaml-btn">Import Sentences</button>
-          </div>
+          </div>` : this._sentenceReadOnlyNotice()}
         </div>
       </div>
     `;
