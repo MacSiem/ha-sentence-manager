@@ -2657,6 +2657,8 @@ canvas {
 
         .sentence-item {
           display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
           justify-content: space-between;
           align-items: center;
           padding: 12px;
@@ -2672,7 +2674,9 @@ canvas {
         }
 
         .sentence-content {
-          flex: 1;
+          flex: 1 1 220px;
+          min-width: 0;
+          overflow-wrap: anywhere;
         }
 
         .sentence-trigger {
@@ -2689,8 +2693,9 @@ canvas {
 
         .sentence-actions {
           display: flex;
+          flex-wrap: wrap;
           gap: 4px;
-          margin-left: 12px;
+          margin-left: 0;
         }
 
         .search-input {

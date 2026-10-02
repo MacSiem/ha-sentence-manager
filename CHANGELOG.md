@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Preserve quoted phrases, response text, intent names and colon-containing slot values when importing the card's own YAML export.
+- Follow the selected PL/EN language in list, import/export and custom-action descriptions.
+- Wrap sentence actions below long text when the card is narrow, including narrow Sections cards in wide windows.
+
 ## 5.0.15 (2026-09-29)
 
 - Use Home Assistant’s bundled PyYAML dependency instead of redundantly declaring it in the custom integration manifest.
