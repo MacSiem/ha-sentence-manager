@@ -169,7 +169,7 @@ class NormalizeTests(unittest.TestCase):
 
 class AlignedIdsTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.storage = SentenceStorage(hass=None)  # __init__ only stores hass
+        self.storage = SentenceStorage(_FakeHass(""))  # pure helpers need no filesystem access
 
     def test_pads_missing_ids_and_flags_dirty(self) -> None:
         aligned, dirty = self.storage._aligned_ids(
