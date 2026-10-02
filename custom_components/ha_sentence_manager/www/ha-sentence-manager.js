@@ -656,7 +656,7 @@ class HASentenceManager extends HTMLElement {
         valuesLabel: 'wartości',
         refreshBtn: 'Odśwież',
         directoryStructure: 'Struktura katalogów:',
-        autoDetectHint: 'Testuje znane frazy przez Conversation API, aby wykryć działające intenty.',
+        autoDetectHint: 'Odczytuje zapisane zdania z integracji bez uruchamiania komend głosowych.',
         pasteYamlHint: 'Skopiuj zawartość pliku YAML z katalogu custom_sentences i wklej poniżej.',
         customVoiceCommands: 'Niestandardowe komendy głosowe skonfigurowane w Home Assistant.',
         importedSentences: 'Zaimportowano {count} zdań z HA',
@@ -727,7 +727,7 @@ class HASentenceManager extends HTMLElement {
         valuesLabel: 'values',
         refreshBtn: 'Refresh',
         directoryStructure: 'Directory structure:',
-        autoDetectHint: 'Tests known phrases via Conversation API to detect working intents.',
+        autoDetectHint: 'Reads saved sentences from the integration without running voice commands.',
         pasteYamlHint: 'Copy YAML file content from custom_sentences directory and paste below.',
         customVoiceCommands: 'Custom voice commands configured in Home Assistant.',
         importedSentences: 'Imported {count} sentences from HA',
@@ -1327,12 +1327,12 @@ class HASentenceManager extends HTMLElement {
       </div>
 
       <div class="tabs">
-        <button class="tab-btn ${this.currentTab === 'ha-sentences' ? 'active' : ''}" data-tab="ha-sentences">\u{1F3E0} HA Sentences</button>
-        <button class="tab-btn ${this.currentTab === 'editor' ? 'active' : ''}" data-tab="editor">\u270F\uFE0F Editor</button>
-        <button class="tab-btn ${this.currentTab === 'list' ? 'active' : ''}" data-tab="list">\u{1F4CB} Sentences</button>
-        <button class="tab-btn ${this.currentTab === 'test' ? 'active' : ''}" data-tab="test">\u{1F9EA} Test</button>
-        <button class="tab-btn ${this.currentTab === 'export' ? 'active' : ''}" data-tab="export">\u{1F4E6} Import/Export</button>
-        <button class="tab-btn ${this.currentTab === 'actions' ? 'active' : ''}" data-tab="actions">⚙️ Custom Actions</button>
+        <button class="tab-btn ${this.currentTab === 'ha-sentences' ? 'active' : ''}" aria-pressed="${this.currentTab === 'ha-sentences'}" data-tab="ha-sentences">\u{1F3E0} ${this._lang === 'pl' ? 'Zdania HA' : 'HA Sentences'}</button>
+        <button class="tab-btn ${this.currentTab === 'editor' ? 'active' : ''}" aria-pressed="${this.currentTab === 'editor'}" data-tab="editor">\u270F\uFE0F ${this._lang === 'pl' ? 'Edytor' : 'Editor'}</button>
+        <button class="tab-btn ${this.currentTab === 'list' ? 'active' : ''}" aria-pressed="${this.currentTab === 'list'}" data-tab="list">\u{1F4CB} ${this._lang === 'pl' ? 'Zdania' : 'Sentences'}</button>
+        <button class="tab-btn ${this.currentTab === 'test' ? 'active' : ''}" aria-pressed="${this.currentTab === 'test'}" data-tab="test">\u{1F9EA} ${this._lang === 'pl' ? 'Test' : 'Test'}</button>
+        <button class="tab-btn ${this.currentTab === 'export' ? 'active' : ''}" aria-pressed="${this.currentTab === 'export'}" data-tab="export">\u{1F4E6} ${this._lang === 'pl' ? 'Import/Eksport' : 'Import/Export'}</button>
+        <button class="tab-btn ${this.currentTab === 'actions' ? 'active' : ''}" aria-pressed="${this.currentTab === 'actions'}" data-tab="actions">⚙️ ${this._lang === 'pl' ? 'Własne akcje' : 'Custom Actions'}</button>
       </div>
 
       <div class="tab-content active">
@@ -1488,7 +1488,7 @@ class HASentenceManager extends HTMLElement {
           <div class="load-options" style="margin-top:16px;display:grid;gap:12px;">
             <div class="info-card" style="padding:16px;">
               <h4 style="margin-bottom:8px;font-size:14px;">🔍 ${this._lang === 'pl' ? 'Automatyczne wykrywanie' : 'Auto Detection'}</h4>
-              <p class="hint" style="font-size:12px;color:var(--bento-text-muted);margin-bottom:8px;">${this._lang === 'pl' ? 'Testuje znane frazy przez Conversation API, aby wykryć działające intenty.' : 'Tests known phrases via Conversation API to detect working intents.'}</p>
+              <p class="hint" style="font-size:12px;color:var(--bento-text-muted);margin-bottom:8px;">${this._lang === 'pl' ? 'Odczytuje zapisane zdania z integracji bez uruchamiania komend głosowych.' : 'Reads saved sentences from the integration without running voice commands.'}</p>
               <button class="btn btn-primary" id="detect-ha-btn">🔍 ${this._lang === 'pl' ? 'Wykryj automatycznie' : 'Auto Detect'}</button>
               <span id="detect-status" style="margin-left:8px;font-size:12px;color:var(--bento-text-muted);"></span>
             </div>
@@ -1608,51 +1608,51 @@ class HASentenceManager extends HTMLElement {
       <div class="tab-panel ${this.currentTab === 'editor' ? 'active' : ''}" data-tab-content="editor">
         <div class="editor-section">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-            <h2 style="margin:0;">${this.editingIndex !== null ? '\u270F\uFE0F Edytuj zdanie' : '\u2795 Nowe zdanie'}</h2>
+            <h2 style="margin:0;">${this.editingIndex !== null ? (this._lang === 'pl' ? '✏️ Edytuj zdanie' : '✏️ Edit sentence') : (this._lang === 'pl' ? '➕ Nowe zdanie' : '➕ New sentence')}</h2>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0;">
               <select id="sentence-selector" style="min-width:220px;padding:8px 12px;font-size:13px;border-radius:var(--bento-radius-sm);border:1.5px solid var(--bento-border);background:var(--bento-card);color:var(--bento-text);">
-                <option value="">Wybierz zdanie do edycji...</option>
+                <option value="">${this._lang === 'pl' ? 'Wybierz zdanie do edycji...' : 'Choose a sentence to edit...'}</option>
                 ${this.sentences.map((s, i) => `<option value="${i}">${_esc(s.trigger.substring(0, 50))}${s.trigger.length > 50 ? '...' : ''} [${_esc(s.intent)}]</option>`).join('')}
               </select>
-              <button class="btn btn-secondary" id="new-sentence-btn" style="white-space:nowrap;">+ Nowe</button>
+              <button class="btn btn-secondary" id="new-sentence-btn" style="white-space:nowrap;">${this._lang === 'pl' ? '+ Nowe' : '+ New'}</button>
             </div>
           </div>
 
           <div class="form-group">
-            <label for="trigger-input">Trigger Sentence (use {slot} for placeholders)</label>
-            <input type="text" id="trigger-input" placeholder="e.g., Turn on {area} lights" class="trigger-input">
+            <label for="trigger-input">${this._lang === 'pl' ? 'Zdanie wywołujące (użyj {slot} dla zmiennych)' : 'Trigger Sentence (use {slot} for placeholders)'}</label>
+            <input type="text" id="trigger-input" placeholder="${this._lang === 'pl' ? 'np. Włącz światło w {area}' : 'e.g., Turn on {area} lights'}" class="trigger-input">
             <div class="preview-slots"></div>
           </div>
 
           <div class="form-group">
-            <label for="intent-input">Intent Name</label>
-            <input type="text" id="intent-input" placeholder="e.g., turn_on" class="intent-input">
+            <label for="intent-input">${this._lang === 'pl' ? 'Nazwa intentu' : 'Intent Name'}</label>
+            <input type="text" id="intent-input" placeholder="${this._lang === 'pl' ? 'np. turn_on' : 'e.g., turn_on'}" class="intent-input">
           </div>
 
           <div class="form-group">
-            <label>Slots Definition</label>
+            <label>${this._lang === 'pl' ? 'Definicje zmiennych' : 'Slots Definition'}</label>
             <div id="slots-container" class="slots-container"></div>
-            <button class="btn btn-secondary" id="add-slot-btn">+ Add Slot</button>
+            <button class="btn btn-secondary" id="add-slot-btn">${this._lang === 'pl' ? '+ Dodaj zmienną' : '+ Add Slot'}</button>
           </div>
 
           <div class="form-group">
-            <label for="response-input">Response Template (optional)</label>
-            <input type="text" id="response-input" placeholder="e.g., {area} lights are now on" class="response-input">
+            <label for="response-input">${this._lang === 'pl' ? 'Szablon odpowiedzi (opcjonalny)' : 'Response Template (optional)'}</label>
+            <input type="text" id="response-input" placeholder="${this._lang === 'pl' ? 'np. Światło w {area} jest włączone' : 'e.g., {area} lights are now on'}" class="response-input">
           </div>
 
           <div class="template-library">
-            <p>Quick Templates:</p>
-            <button class="btn btn-template" data-template="lights">Lights</button>
-            <button class="btn btn-template" data-template="climate">Climate</button>
-            <button class="btn btn-template" data-template="media">Media</button>
-            <button class="btn btn-template" data-template="covers">Covers</button>
-            <button class="btn btn-template" data-template="locks">Locks</button>
-            <button class="btn btn-template" data-template="scenes">Scenes</button>
+            <p>${this._lang === 'pl' ? 'Gotowe szablony:' : 'Quick Templates:'}</p>
+            <button class="btn btn-template" data-template="lights">${this._lang === 'pl' ? 'Światła' : 'Lights'}</button>
+            <button class="btn btn-template" data-template="climate">${this._lang === 'pl' ? 'Klimat' : 'Climate'}</button>
+            <button class="btn btn-template" data-template="media">${this._lang === 'pl' ? 'Media' : 'Media'}</button>
+            <button class="btn btn-template" data-template="covers">${this._lang === 'pl' ? 'Osłony' : 'Covers'}</button>
+            <button class="btn btn-template" data-template="locks">${this._lang === 'pl' ? 'Zamki' : 'Locks'}</button>
+            <button class="btn btn-template" data-template="scenes">${this._lang === 'pl' ? 'Sceny' : 'Scenes'}</button>
           </div>
 
           <div class="form-actions">
-            <button class="btn btn-primary" id="save-btn">Save Sentence</button>
-            <button class="btn btn-secondary" id="clear-btn">Clear</button>
+            <button class="btn btn-primary" id="save-btn">${this._lang === 'pl' ? 'Zapisz zdanie' : 'Save Sentence'}</button>
+            <button class="btn btn-secondary" id="clear-btn">${this._lang === 'pl' ? 'Wyczyść' : 'Clear'}</button>
           </div>
         </div>
       </div>
@@ -1851,7 +1851,11 @@ class HASentenceManager extends HTMLElement {
         this.currentTab = e.target.dataset.tab;
         history.replaceState(null, '', location.pathname + '#' + this._toolId + '/' + this.currentTab);
         // Update tab buttons active state without full re-render
-        this.shadowRoot.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === this.currentTab));
+        this.shadowRoot.querySelectorAll('.tab-btn').forEach(b => {
+          const active = b.dataset.tab === this.currentTab;
+          b.classList.toggle('active', active);
+          b.setAttribute('aria-pressed', String(active));
+        });
         // Update only tab content
         let tabHtml = '';
         switch (this.currentTab) {
