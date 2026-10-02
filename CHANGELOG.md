@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+- Serialize pending sentence writes across integration reloads, preserving acknowledged sentences and their stable IDs. Concurrent edits with an outdated revision report a conflict.
+
+
 - Preserve quoted phrases, response text, intent names and colon-containing slot values when importing the card's own YAML export.
 - Follow the selected PL/EN language in list, import/export and custom-action descriptions.
 - Wrap sentence actions below long text when the card is narrow, including narrow Sections cards in wide windows.

@@ -38,7 +38,7 @@ import yaml
 
 from homeassistant.core import HomeAssistant
 
-from .const import CUSTOM_SENTENCES_DIR_NAME, FILE_PREFIX
+from .const import CUSTOM_SENTENCES_DIR_NAME, DOMAIN, FILE_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,7 +67,10 @@ class SentenceStorage:
         self.hass = hass
         # Only synchronous executor work takes this lock, never the event loop.
         # Guard the whole read/check/write, including the parallel ID sidecar.
-        self._io_lock = threading.RLock()
+        # The domain bucket survives config-entry unload/reload. Old executor
+        # jobs retain their storage instance, so its lock must survive as well.
+        bucket = hass.data.setdefault(DOMAIN, {})
+        self._io_lock = bucket.setdefault("_storage_io_lock", threading.RLock())
 
     # ---------------------------------------------------------------- public
 

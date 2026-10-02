@@ -91,6 +91,7 @@ class _FakeConfig:
 
 class _FakeHass:
     def __init__(self, base: str) -> None:
+        self.data = {}
         self.config = _FakeConfig(base)
 
 
