@@ -1031,17 +1031,17 @@ class HASentenceManager extends HTMLElement {
   exportAsYaml() {
     let yaml = 'custom_sentences:\n';
     this.sentences.forEach(sentence => {
-      yaml += `  - trigger: "${sentence.trigger}"\n`;
+      yaml += `  - trigger: ${JSON.stringify(sentence.trigger)}\n`;
       yaml += `    intents:\n`;
       yaml += `      - intent: ${sentence.intent}\n`;
       if (Object.keys(sentence.slots).length > 0) {
         yaml += `        slots:\n`;
         Object.entries(sentence.slots).forEach(([name, type]) => {
-          yaml += `          ${name}: ${type}\n`;
+          yaml += `          ${name}: ${JSON.stringify(type)}\n`;
         });
       }
       if (sentence.response) {
-        yaml += `    response: "${sentence.response}"\n`;
+        yaml += `    response: ${JSON.stringify(sentence.response)}\n`;
       }
     });
     return yaml;
@@ -1053,22 +1053,38 @@ class HASentenceManager extends HTMLElement {
       const lines = yamlText.split('\n');
       const imported = [];
       let currentSentence = null;
+      let slotIndent = null;
+      // The card's export format uses JSON-compatible double-quoted YAML
+      // scalars. Preserve quotes, escapes and colons rather than stripping them.
+      const readScalar = value => {
+        const text = value.trim();
+        if (text.startsWith('"')) return JSON.parse(text);
+        if (text.startsWith("'")) {
+          if (!text.endsWith("'")) throw new Error('Invalid quoted scalar');
+          return text.slice(1, -1).replace(/''/g, "'");
+        }
+        return text;
+      };
 
       lines.forEach(line => {
         const trimmed = line.trim();
+        const indent = line.length - line.trimStart().length;
         if (trimmed.startsWith('- trigger:')) {
           if (currentSentence) imported.push(currentSentence);
-          const trigger = trimmed.replace('- trigger:', '').replace(/['"]/g, '').trim();
-          currentSentence = { trigger, intent: '', slots: {}, response: '' };
-        } else if (trimmed.startsWith('intent:') && currentSentence) {
-          currentSentence.intent = trimmed.replace('intent:', '').trim();
-        } else if (trimmed.match(/^\w+:/) && currentSentence && line.includes(':') && !line.includes('trigger:') && !line.includes('intent:')) {
-          const [key, value] = trimmed.split(':');
-          if (key && value && !['slots', 'response', 'intents'].includes(key)) {
-            currentSentence.slots[key.trim()] = value.trim();
-          }
+          const trigger = readScalar(trimmed.slice('- trigger:'.length));
+          currentSentence = { trigger, intent: '', slots: Object.create(null), response: '' };
+          slotIndent = null;
+        } else if (/^(?:-\s+)?intent:/.test(trimmed) && currentSentence) {
+          currentSentence.intent = readScalar(trimmed.replace(/^(?:-\s+)?intent:/, ''));
+          slotIndent = null;
         } else if (trimmed.startsWith('response:') && currentSentence) {
-          currentSentence.response = trimmed.replace('response:', '').replace(/['"]/g, '').trim();
+          currentSentence.response = readScalar(trimmed.slice('response:'.length));
+          slotIndent = null;
+        } else if (trimmed === 'slots:' && currentSentence) {
+          slotIndent = indent;
+        } else if (slotIndent !== null && indent > slotIndent && /^\w+:/.test(trimmed)) {
+          const colon = trimmed.indexOf(':');
+          currentSentence.slots[trimmed.slice(0, colon)] = readScalar(trimmed.slice(colon + 1));
         }
       });
 
