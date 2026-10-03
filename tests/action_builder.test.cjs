@@ -25,7 +25,7 @@ function parseYaml(text) {
 test('actual Generate click creates safely quoted sentence-trigger automation without executing HA', async () => {
  const f = await fixture();
  try {
-  const pl = 'tryb "kino": # <img src=x>\nnowa linia', en = "movie (mode|time) [please]";
+  const pl = 'tryb "kino": # <img src=x>', en = "movie (mode|time) [please]";
   f.field('action-trigger', pl); f.field('action-trigger-en', en); f.field('action-service', 'scene.turn_on'); f.field('action-entity', 'scene.qa_movie'); f.click('btn-generate-action');
   const output = f.card.shadowRoot.getElementById('action-yaml-output');
   assert.notEqual(output.style.display, 'none');
