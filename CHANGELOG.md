@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Refresh navigation and guidance after ordinary Home Assistant language updates while preserving unsaved editor/import/action values, dynamic slots, focus and selection. Role changes still remove privileged editing; locale changes do not read or mutate the backend again.
 - Serialize pending sentence writes across integration reloads, preserving acknowledged sentences and their stable IDs. Concurrent edits with an outdated revision report a conflict.
 
 

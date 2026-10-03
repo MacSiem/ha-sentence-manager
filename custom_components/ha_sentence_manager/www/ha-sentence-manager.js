@@ -569,6 +569,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   set hass(hass) {
+    const previousLanguage = this._lang;
     try {
       var _bg = (getComputedStyle(this).getPropertyValue('--card-background-color') || getComputedStyle(this).getPropertyValue('--primary-background-color') || '').trim();
       var _d = false;
@@ -603,9 +604,42 @@ class HASentenceManager extends HTMLElement {
       return;
     }
     if (permissionsChanged) this.render();
+    else if (previousLanguage !== this._lang) this._renderLocalePreservingDrafts();
     // Only re-render on hass update if entities actually changed
     // Sentence Manager has no entity dependencies — skip re-render on hass updates
     // Re-rendering is handled explicitly by user actions (tab switch, save, etc.)
+  }
+
+  _renderLocalePreservingDrafts() {
+    const active = this.shadowRoot?.activeElement;
+    const fields = Array.from(this.shadowRoot?.querySelectorAll('input[id], textarea[id], select[id]') || [])
+      .map(field => ({ id: field.id, value: field.value, checked: field.checked, scrollTop: field.scrollTop }));
+    // Slot rows are created while editing and retain their removal listeners.
+    const slotRows = Array.from(this.shadowRoot?.querySelector('#slots-container')?.children || []);
+    const selection = active && 'selectionStart' in active ? {
+      start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection,
+    } : null;
+    this.render();
+    for (const row of slotRows) {
+      const remove = row.querySelector('.remove-slot-btn');
+      if (remove) remove.textContent = this._lang === 'pl' ? 'Usuń' : 'Remove';
+      this.shadowRoot.querySelector('#slots-container')?.appendChild(row);
+    }
+    for (const field of fields) {
+      const current = this.shadowRoot.getElementById(field.id);
+      if (!current) continue;
+      current.value = field.value;
+      if (field.checked !== undefined) current.checked = field.checked;
+      current.scrollTop = field.scrollTop;
+    }
+    const current = active?.id ? this.shadowRoot.getElementById(active.id)
+      : active?.isConnected ? active : null;
+    if (current) {
+      current.focus({ preventScroll: true });
+      if (selection?.start != null && typeof current.setSelectionRange === 'function') {
+        current.setSelectionRange(selection.start, selection.end, selection.direction);
+      }
+    }
   }
 
   get hass() {
