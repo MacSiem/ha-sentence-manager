@@ -84,3 +84,18 @@ test('a simultaneous role and locale change still removes privileged editing and
   assert.equal(requests.length, 1);
  } finally { dom.window.close(); }
 });
+for (const [tab, id, draft, translatedPlaceholder] of [
+ ['actions', 'action-service', 'script.qa_unsaved', 'np.'],
+ ['test', 'test-input', 'QA unsubmitted voice command', 'Wpisz komendę'],
+]) test(`ordinary locale changes preserve the ${tab} form without running it`, async () => {
+ const { card, dom, hass, requests } = await fixture('en', tab);
+ try {
+  const input = card.shadowRoot.getElementById(id); input.value = draft; input.focus(); input.select();
+  card.hass = { ...hass, language: 'pl' };
+  const current = card.shadowRoot.getElementById(id);
+  assert.equal(current.value, draft); assert.equal(card.shadowRoot.activeElement, current);
+  assert.ok(current.placeholder.startsWith(translatedPlaceholder));
+  assert.equal(current.selectionStart, 0); assert.equal(current.selectionEnd, draft.length);
+  assert.equal(requests.length, 1); assert.equal(requests[0].type, 'ha_sentence_manager/list');
+ } finally { dom.window.close(); }
+});
