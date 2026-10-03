@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
-const { spawnSync } = require('node:child_process');
+const { parse: parseYaml } = require('yaml');
 const { JSDOM } = require('jsdom');
 async function fixture(language = 'en') {
  const dom = new JSDOM('', { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/' });
@@ -17,10 +17,6 @@ async function fixture(language = 'en') {
  const field = (id, value) => { const el = card.shadowRoot.getElementById(id); el.value = value; el.dispatchEvent(new dom.window.Event('input')); return el; };
  const click = id => card.shadowRoot.getElementById(id).click();
  return { card, dom, hass, requests, notices, copies, field, click };
-}
-function parseYaml(text) {
- const p = spawnSync('/opt/homebrew/bin/python3', ['-c', 'import sys,json,yaml;print(json.dumps(yaml.safe_load(sys.stdin.read())))'], { input: text, encoding: 'utf8', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
- assert.equal(p.status, 0, p.stderr); return JSON.parse(p.stdout);
 }
 test('actual Generate click creates safely quoted sentence-trigger automation without executing HA', async () => {
  const f = await fixture();
