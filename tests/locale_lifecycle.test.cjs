@@ -10,7 +10,7 @@ async function fixture(language = 'en', tab = 'editor') {
  card.currentTab = tab; card.setConfig({ show_support: false }); dom.window.document.body.append(card);
  const requests = [];
  const hass = { language, user: { is_admin: true }, themes: {}, states: {}, config: { language: 'en' },
-  callWS: async message => { requests.push(message); return { sentences: [] }; } };
+  callWS: async message => { requests.push(message); return []; } };
  card.hass = hass; await new Promise(resolve => setImmediate(resolve));
  return { card, dom, hass, requests };
 }
