@@ -665,7 +665,7 @@ class HASentenceManager extends HTMLElement {
         saved: 'Zapisano',
         deleted: 'Usuni\u0119to',
         confirmDelete: 'Czy na pewno chcesz usun\u0105\u0107?',
-        customActionDesc: 'Twórz własne akcje głosowe powiązane z usługami HA. Każda akcja generuje sentence + automation YAML.',
+        customActionDesc: 'Przygotuj YAML automatyzacji z wyzwalaczem zdania. Wklej go w edytorze YAML nowej automatyzacji w HA. Ten formularz niczego nie zapisuje ani nie uruchamia.',
         triggerPhraseEg: 'np. włącz tryb filmowy',
         helpTitle: 'Jak działają komendy głosowe?',
         helpEditor: 'Editor — tworzysz zdania (sentences), które HA rozpoznaje jako komendy głosowe.',
@@ -736,7 +736,7 @@ class HASentenceManager extends HTMLElement {
         saved: 'Saved',
         deleted: 'Deleted',
         confirmDelete: 'Are you sure you want to delete?',
-        customActionDesc: 'Create your own voice actions linked to HA services. Each action generates sentence + automation YAML.',
+        customActionDesc: 'Prepare automation YAML with a sentence trigger. Paste it into the YAML editor of a new HA automation. This form does not save or run anything.',
         triggerPhraseEg: 'e.g. turn on movie mode',
         helpTitle: 'How do voice commands work?',
         helpEditor: 'Editor — you create sentences that HA recognizes as voice commands.',
@@ -1875,6 +1875,11 @@ class HASentenceManager extends HTMLElement {
   }
 
   attachEventListeners() {
+    this.shadowRoot.getElementById('btn-generate-action')?.addEventListener('click', () => this._generateActionYaml());
+    this.shadowRoot.getElementById('btn-copy-action-yaml')?.addEventListener('click', () => this._copyActionYaml());
+    for (const id of ['action-trigger', 'action-trigger-en', 'action-service', 'action-entity']) {
+      this.shadowRoot.getElementById(id)?.addEventListener('input', () => this._clearActionYaml());
+    }
     this.shadowRoot.querySelector('.support-dismiss')?.addEventListener('click', () => {
       try { localStorage.setItem('ha-sentence-manager-support-dismissed', '1'); } catch (_) {}
       this.render();
@@ -3231,6 +3236,49 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     `;
   }
 
+  _clearActionYaml() {
+    this._generatedActionYaml = '';
+    const output = this.shadowRoot.getElementById('action-yaml-output');
+    if (output) output.style.display = 'none';
+    const code = this.shadowRoot.getElementById('action-yaml-code');
+    if (code) code.textContent = '';
+  }
+
+  _generateActionYaml() {
+    const value = id => this.shadowRoot.getElementById(id)?.value.trim() || '';
+    const commands = [...new Set([value('action-trigger'), value('action-trigger-en')].filter(Boolean))];
+    const service = value('action-service'), entity = value('action-entity');
+    this._clearActionYaml();
+    if (!commands.length || !/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/.test(service) ||
+        (entity && !/^[a-z_][a-z0-9_]*\.[a-z0-9_]+$/.test(entity))) {
+      this.showNotification(this._lang === 'pl'
+        ? 'Podaj co najmniej jedną frazę, usługę domain.action i opcjonalnie poprawne ID encji.'
+        : 'Enter at least one phrase, a domain.action service and an optional valid entity ID.', 'error');
+      return;
+    }
+    // JSON strings are quoted YAML scalars: punctuation, line breaks and HTML stay literal.
+    const lines = [`alias: ${JSON.stringify(commands[0])}`, 'triggers:', '  - trigger: conversation', '    command:',
+      ...commands.map(command => `      - ${JSON.stringify(command)}`), 'conditions: []', 'actions:',
+      `  - action: ${service}`];
+    if (entity) lines.push('    target:', `      entity_id: ${entity}`);
+    lines.push('mode: single');
+    this._generatedActionYaml = lines.join('\n') + '\n';
+    this.shadowRoot.getElementById('action-yaml-code').textContent = this._generatedActionYaml;
+    this.shadowRoot.getElementById('action-yaml-output').style.display = 'block';
+  }
+
+  async _copyActionYaml() {
+    if (!this._generatedActionYaml) return;
+    try {
+      await navigator.clipboard.writeText(this._generatedActionYaml);
+      this.showNotification(this._lang === 'pl' ? 'YAML skopiowany do schowka' : 'YAML copied to clipboard', 'success');
+    } catch (_) {
+      this.showNotification(this._lang === 'pl'
+        ? 'Nie można skopiować do schowka. Zaznacz i skopiuj wygenerowany YAML.'
+        : 'Could not copy to the clipboard. Select and copy the generated YAML.', 'error');
+    }
+  }
+
   _renderActionsTab() {
     const defaultActions = [
       { intent: 'HassLightSet', slots: 'name, brightness, color', desc: this._lang === 'pl' ? 'Steruj światłem — włącz, wyłącz, jasność, kolor' : 'Control lights — on, off, brightness, color' },
@@ -3274,9 +3322,9 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     html += '</div>';
 
     // Generated YAML output
-    html += '<div id="action-yaml-output" style="display:none;margin-top:16px;">';
+    html += `<div id="action-yaml-output" style="display:${this._generatedActionYaml ? 'block' : 'none'};margin-top:16px;">`;
     html += `<div class="section-title">📄 ${this._lang === 'pl' ? 'Wygenerowany YAML' : 'Generated YAML'}</div>`;
-    html += '<pre id="action-yaml-code" style="background:#1e293b;color:#e2e8f0;padding:16px;border-radius:10px;font-size:12px;overflow-x:auto;line-height:1.6;"></pre>';
+    html += `<pre id="action-yaml-code" style="background:#1e293b;color:#e2e8f0;padding:16px;border-radius:10px;font-size:12px;overflow-x:auto;line-height:1.6;">${_esc(this._generatedActionYaml || '')}</pre>`;
     html += `<button class="btn-secondary" id="btn-copy-action-yaml" style="margin-top:8px;">📋 ${this._lang === 'pl' ? 'Kopiuj do schowka' : 'Copy to Clipboard'}</button>`;
     html += '</div>';
 

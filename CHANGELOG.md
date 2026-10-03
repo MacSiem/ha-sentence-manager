@@ -1,5 +1,7 @@
 # Changelog
 
+- Connect the Custom Actions Generate YAML and Copy buttons. Generate a safely quoted sentence-trigger automation locally, validate service/entity identifiers, preserve output across language changes, and report clipboard refusal without claiming success. Editing the draft clears obsolete output; no HA service or storage calls run.
+
 ## Unreleased
 
 ### Fixed

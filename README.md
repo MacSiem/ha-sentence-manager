@@ -62,7 +62,7 @@ No options are required.
 | **Sentences** | Searchable flat list of every persisted entry with Edit/Delete actions. |
 | **Test** | Sends the typed phrase to HA's own `conversation/process` WebSocket command and shows the matched intent and response — a live round-trip through Assist, not a local regex simulation. |
 | **Import/Export** | Exports the currently loaded sentences as a YAML text block, or bulk-imports pasted YAML (each parsed row is created individually through the same admin-only `create` command as the Editor tab). |
-| **Custom Actions** | A reference table of built-in HA Assist intents plus a form that generates a copy-pasteable automation/sentence YAML snippet. This tab does not read or write anything through the integration — nothing you fill in here is saved. |
+| **Custom Actions** | A reference table of built-in HA Assist intents plus a form that generates automation YAML with one or two sentence triggers. Paste the result into the YAML editor of a new HA automation. A service is required; an entity target is optional. Generation and clipboard copying stay in the browser and never call a service or save an automation. Draft edits invalidate the old generated output. |
 
 Import/Export uses the card's `custom_sentences` list format, not an arbitrary Home Assistant configuration file. Exported phrases, responses and slot values preserve quotes and colons when pasted back into Import. The HA Sentences tab separately reads the integration's persisted Assist definitions.
 
