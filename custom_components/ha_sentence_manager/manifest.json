@@ -9,14 +9,14 @@
     "conversation",
     "frontend",
     "http",
+    "lovelace",
+    "panel_custom",
     "websocket_api"
   ],
   "documentation": "https://github.com/MacSiem/ha-sentence-manager",
   "integration_type": "service",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/MacSiem/ha-sentence-manager/issues",
-  "requirements": [
-    "pyyaml>=6.0"
-  ],
-  "version": "5.0.14"
+  "requirements": [],
+  "version": "5.0.15"
 }

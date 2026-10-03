@@ -21,12 +21,15 @@ Exercised behavior:
 from __future__ import annotations
 
 import importlib.util
+import concurrent.futures
+import threading
 import os
 import sys
 import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 def _stub_homeassistant() -> None:
@@ -88,6 +91,7 @@ class _FakeConfig:
 
 class _FakeHass:
     def __init__(self, base: str) -> None:
+        self.data = {}
         self.config = _FakeConfig(base)
 
 
@@ -165,7 +169,7 @@ class NormalizeTests(unittest.TestCase):
 
 class AlignedIdsTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.storage = SentenceStorage(hass=None)  # __init__ only stores hass
+        self.storage = SentenceStorage(_FakeHass(""))  # pure helpers need no filesystem access
 
     def test_pads_missing_ids_and_flags_dirty(self) -> None:
         aligned, dirty = self.storage._aligned_ids(
@@ -318,6 +322,130 @@ class CreateSyncWritesExpectedFilesTests(unittest.TestCase):
             meta_loaded["ids"], ["en:HassTurnOn:11111111", "en:HassTurnOn:22222222"]
         )
 
+
+class AtomicWriteTests(unittest.TestCase):
+    def test_failed_yaml_dump_leaves_previous_sentence_file_intact(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(hass=_FakeHass(root))
+            path = storage._path_for("en", "HassTurnOn")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            Path(path).write_text("language: en\nintents: {}\n", encoding="utf-8")
+
+            def interrupt(_data, handle, **_kwargs):
+                handle.write("partial YAML")
+                raise OSError("write interrupted")
+
+            with mock.patch.object(storage_module.yaml, "safe_dump", side_effect=interrupt):
+                with self.assertRaisesRegex(OSError, "write interrupted"):
+                    storage._dump(path, {"language": "en", "intents": {}})
+
+            self.assertEqual("language: en\nintents: {}\n", Path(path).read_text(encoding="utf-8"))
+            self.assertEqual([Path(path).name], [p.name for p in Path(path).parent.iterdir()])
+
+    def test_manual_yaml_edit_after_list_rejects_stale_card_update(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(hass=_FakeHass(root))
+            sentence_id = "en:HassTurnOn:deadbeef"
+            storage._create_sync("en", "HassTurnOn", ["turn on"], {}, "", sentence_id)
+            listed = storage._list_all_sync("en")
+            revision = listed[0]["revision"]
+            path = storage._path_for("en", "HassTurnOn")
+            manual = storage._safe_load(path)
+            manual["intents"]["HassTurnOn"]["data"][0]["sentences"] = ["turn on manually"]
+            Path(path).write_text(storage_module.yaml.safe_dump(manual), encoding="utf-8")
+
+            with self.assertRaises(storage_module.SentenceConflictError):
+                storage._update_sync("en", "HassTurnOn", sentence_id, {"sentences": ["turn on by card"]}, revision)
+
+            self.assertEqual(["turn on manually"], storage._safe_load(path)["intents"]["HassTurnOn"]["data"][0]["sentences"])
+
+    def test_manual_yaml_edit_after_list_rejects_stale_card_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(hass=_FakeHass(root))
+            sentence_id = "en:HassTurnOn:deadbeef"
+            storage._create_sync("en", "HassTurnOn", ["turn on"], {}, "", sentence_id)
+            revision = storage._list_all_sync("en")[0]["revision"]
+            path = storage._path_for("en", "HassTurnOn")
+            manual = storage._safe_load(path)
+            manual["intents"]["HassTurnOn"]["data"][0]["sentences"] = ["turn on manually"]
+            Path(path).write_text(storage_module.yaml.safe_dump(manual), encoding="utf-8")
+
+            with self.assertRaises(storage_module.SentenceConflictError):
+                storage._delete_sync("en", "HassTurnOn", sentence_id, revision)
+
+            self.assertTrue(Path(path).exists())
+            self.assertEqual(["turn on manually"], storage._safe_load(path)["intents"]["HassTurnOn"]["data"][0]["sentences"])
+
+
+
+class ConcurrentSaveTests(unittest.TestCase):
+    def _coordinate_reads(self, storage, path):
+        """Force both unguarded writers to observe the same original bytes."""
+        read_gate = threading.Barrier(2)
+        replace_gate = threading.Barrier(2)
+        load = storage._load_with_revision
+        revision = storage._file_revision
+
+        def pause(gate):
+            try:
+                gate.wait(timeout=0.2)
+            except threading.BrokenBarrierError:
+                # A serialized writer legitimately cannot reach the gate yet.
+                pass
+
+        def coordinated_load(file):
+            result = load(file)
+            if file == path:
+                pause(read_gate)
+            return result
+
+        def coordinated_revision(file):
+            result = revision(file)
+            if file == path:
+                pause(replace_gate)
+            return result
+
+        return mock.patch.object(storage, "_load_with_revision", coordinated_load), mock.patch.object(storage, "_file_revision", coordinated_revision)
+
+    def test_only_one_same_revision_update_can_commit(self):
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(_FakeHass(root))
+            sid = "en:QAStatus:12345678"
+            storage._create_sync("en", "QAStatus", ["qa phrase"], {}, "initial", sid)
+            revision = storage._list_all_sync("en")[0]["revision"]
+            path = storage._path_for("en", "QAStatus")
+
+            def writer(label):
+                try:
+                    storage._update_sync("en", "QAStatus", sid, {"response": label}, revision)
+                    return "saved", label
+                except storage_module.SentenceConflictError:
+                    return "conflict", label
+
+            load, revision_patch = self._coordinate_reads(storage, path)
+            with load, revision_patch, concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(writer, ["first", "second"]))
+            self.assertEqual(1, sum(status == "saved" for status, _ in results), results)
+            self.assertEqual(1, sum(status == "conflict" for status, _ in results), results)
+            winner = next(label for status, label in results if status == "saved")
+            self.assertEqual(winner, storage._list_all_sync("en")[0]["response"])
+
+    def test_concurrent_creates_preserve_both_sentences_and_ids(self):
+        with tempfile.TemporaryDirectory() as root:
+            storage = SentenceStorage(_FakeHass(root))
+            path = storage._path_for("en", "QAStatus")
+
+            def writer(index):
+                sid = f"en:QAStatus:{index:08d}"
+                storage._create_sync("en", "QAStatus", [f"qa phrase {index}"], {}, "", sid)
+                return sid
+
+            load, revision_patch = self._coordinate_reads(storage, path)
+            with load, revision_patch, concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                ids = list(pool.map(writer, [1, 2]))
+            rows = storage._list_all_sync("en")
+            self.assertEqual(set(ids), {row["id"] for row in rows})
+            self.assertEqual({"qa phrase 1", "qa phrase 2"}, {row["sentences"][0] for row in rows})
 
 if __name__ == "__main__":
     unittest.main()

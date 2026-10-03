@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.0.14 (2026-08-28) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.0.15 (2026-09-29) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
@@ -569,6 +569,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   set hass(hass) {
+    const previousLanguage = this._lang;
     try {
       var _bg = (getComputedStyle(this).getPropertyValue('--card-background-color') || getComputedStyle(this).getPropertyValue('--primary-background-color') || '').trim();
       var _d = false;
@@ -582,6 +583,8 @@ class HASentenceManager extends HTMLElement {
     } catch (e) {}
 
     if (hass?.language) this._lang = hass.language.startsWith('pl') ? 'pl' : 'en';    const prevHass = this._hass;
+    const permissionsChanged = this._sentenceAdmin !== (hass?.user?.is_admin === true);
+    this._sentenceAdmin = hass?.user?.is_admin === true;
     this._hass = hass;
     if (!hass) return;
     if (!this._sentencesLoaded) {
@@ -600,9 +603,43 @@ class HASentenceManager extends HTMLElement {
       }
       return;
     }
+    if (permissionsChanged) this.render();
+    else if (previousLanguage !== this._lang) this._renderLocalePreservingDrafts();
     // Only re-render on hass update if entities actually changed
     // Sentence Manager has no entity dependencies — skip re-render on hass updates
     // Re-rendering is handled explicitly by user actions (tab switch, save, etc.)
+  }
+
+  _renderLocalePreservingDrafts() {
+    const active = this.shadowRoot?.activeElement;
+    const fields = Array.from(this.shadowRoot?.querySelectorAll('input[id], textarea[id], select[id]') || [])
+      .map(field => ({ id: field.id, value: field.value, checked: field.checked, scrollTop: field.scrollTop }));
+    // Slot rows are created while editing and retain their removal listeners.
+    const slotRows = Array.from(this.shadowRoot?.querySelector('#slots-container')?.children || []);
+    const selection = active && 'selectionStart' in active ? {
+      start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection,
+    } : null;
+    this.render();
+    for (const row of slotRows) {
+      const remove = row.querySelector('.remove-slot-btn');
+      if (remove) remove.textContent = this._lang === 'pl' ? 'Usuń' : 'Remove';
+      this.shadowRoot.querySelector('#slots-container')?.appendChild(row);
+    }
+    for (const field of fields) {
+      const current = this.shadowRoot.getElementById(field.id);
+      if (!current) continue;
+      current.value = field.value;
+      if (field.checked !== undefined) current.checked = field.checked;
+      current.scrollTop = field.scrollTop;
+    }
+    const current = active?.id ? this.shadowRoot.getElementById(active.id)
+      : active?.isConnected ? active : null;
+    if (current) {
+      current.focus({ preventScroll: true });
+      if (selection?.start != null && typeof current.setSelectionRange === 'function') {
+        current.setSelectionRange(selection.start, selection.end, selection.direction);
+      }
+    }
   }
 
   get hass() {
@@ -628,14 +665,14 @@ class HASentenceManager extends HTMLElement {
         saved: 'Zapisano',
         deleted: 'Usuni\u0119to',
         confirmDelete: 'Czy na pewno chcesz usun\u0105\u0107?',
-        customActionDesc: 'Twórz własne akcje głosowe powiązane z usługami HA. Każda akcja generuje sentence + automation YAML.',
+        customActionDesc: 'Przygotuj YAML automatyzacji z wyzwalaczem zdania. Wklej go w edytorze YAML nowej automatyzacji w HA. Ten formularz niczego nie zapisuje ani nie uruchamia.',
         triggerPhraseEg: 'np. włącz tryb filmowy',
         helpTitle: 'Jak działają komendy głosowe?',
         helpEditor: 'Editor — tworzysz zdania (sentences), które HA rozpoznaje jako komendy głosowe.',
         helpSyntax: 'Składnia: użyj [opcja1|opcja2] dla alternatyw, {slot_name} dla zmiennych.',
         helpIntent: 'Intent — nazwa akcji (np. TurnOnLight). HA mapuje intent na automatyzację.',
         helpTest: 'Test — testuj zdania w zakładce Test — wyślij tekst do Conversation API.',
-        helpImportExport: 'Import/Export — eksportuj do YAML, importuj z pliku.',
+        helpImportExport: 'Import/Export — eksportuj do YAML, importuj wklejony YAML.',
         helpExample: '[włącz|zapal] [światło|lampę] w {room}',
         detectViaAPI: 'Wykryte przez Conversation API',
         language: 'Język:',
@@ -653,7 +690,7 @@ class HASentenceManager extends HTMLElement {
         valuesLabel: 'wartości',
         refreshBtn: 'Odśwież',
         directoryStructure: 'Struktura katalogów:',
-        autoDetectHint: 'Testuje znane frazy przez Conversation API, aby wykryć działające intenty.',
+        autoDetectHint: 'Odczytuje zapisane zdania z integracji bez uruchamiania komend głosowych.',
         pasteYamlHint: 'Skopiuj zawartość pliku YAML z katalogu custom_sentences i wklej poniżej.',
         customVoiceCommands: 'Niestandardowe komendy głosowe skonfigurowane w Home Assistant.',
         importedSentences: 'Zaimportowano {count} zdań z HA',
@@ -699,14 +736,14 @@ class HASentenceManager extends HTMLElement {
         saved: 'Saved',
         deleted: 'Deleted',
         confirmDelete: 'Are you sure you want to delete?',
-        customActionDesc: 'Create your own voice actions linked to HA services. Each action generates sentence + automation YAML.',
+        customActionDesc: 'Prepare automation YAML with a sentence trigger. Paste it into the YAML editor of a new HA automation. This form does not save or run anything.',
         triggerPhraseEg: 'e.g. turn on movie mode',
         helpTitle: 'How do voice commands work?',
         helpEditor: 'Editor — you create sentences that HA recognizes as voice commands.',
         helpSyntax: 'Syntax: use [option1|option2] for alternatives, {slot_name} for variables.',
         helpIntent: 'Intent — the action name (e.g., TurnOnLight). HA maps the intent to automation.',
         helpTest: 'Test — test sentences in the Test tab — send text to Conversation API.',
-        helpImportExport: 'Import/Export — export to YAML, import from file.',
+        helpImportExport: 'Import/Export — export to YAML, import pasted YAML.',
         helpExample: '[turn on|light] [light|lamp] in {room}',
         detectViaAPI: 'Detected via Conversation API',
         language: 'Language:',
@@ -724,7 +761,7 @@ class HASentenceManager extends HTMLElement {
         valuesLabel: 'values',
         refreshBtn: 'Refresh',
         directoryStructure: 'Directory structure:',
-        autoDetectHint: 'Tests known phrases via Conversation API to detect working intents.',
+        autoDetectHint: 'Reads saved sentences from the integration without running voice commands.',
         pasteYamlHint: 'Copy YAML file content from custom_sentences directory and paste below.',
         customVoiceCommands: 'Custom voice commands configured in Home Assistant.',
         importedSentences: 'Imported {count} sentences from HA',
@@ -763,7 +800,7 @@ class HASentenceManager extends HTMLElement {
 
   getCardSize() { return 6; }
 
-  getGridOptions() { return { rows: 8, columns: 12, min_rows: 3, min_columns: 6 }; }
+  getGridOptions() { return { columns: 12, min_rows: 3, min_columns: 6 }; }
 
   static getStubConfig() {
     return {
@@ -777,6 +814,22 @@ class HASentenceManager extends HTMLElement {
   // Sentences live in HA's `custom_sentences/<lang>/ha_sentence_manager_<intent>.yaml`.
   // No browser localStorage for application data: every create/update/delete
   // round-trips through the companion Python integration, which is the source of truth.
+  _canManageSentences() { return this._hass?.user?.is_admin === true; }
+
+  _sentenceAdminMessage() {
+    return this._lang === 'pl'
+      ? 'Tylko administrator może tworzyć, zmieniać i usuwać zdania. Możesz przeglądać oraz eksportować zapisane zdania.'
+      : 'Only an administrator can create, change or delete sentences. You can view and export saved sentences.';
+  }
+
+  _requireSentenceAdmin() {
+    if (!this._canManageSentences()) throw new Error(this._sentenceAdminMessage());
+  }
+
+  _sentenceReadOnlyNotice() {
+    return `<div role="status" style="padding:16px;line-height:1.6;color:var(--bento-text-secondary,#64748b);">${_esc(this._sentenceAdminMessage())}</div>`;
+  }
+
   async _apiList(language = null) {
     if (!this._hass) return [];
     try {
@@ -790,18 +843,22 @@ class HASentenceManager extends HTMLElement {
     }
   }
   async _apiCreate(payload) {
+    this._requireSentenceAdmin();
     if (!this._hass) throw new Error('Home Assistant connection not ready');
     return await this._hass.callWS({ type: 'ha_sentence_manager/create', ...payload });
   }
-  async _apiUpdate(sentence_id, patch) {
+  async _apiUpdate(sentence_id, patch, revision) {
+    this._requireSentenceAdmin();
     if (!this._hass) throw new Error('Home Assistant connection not ready');
-    return await this._hass.callWS({ type: 'ha_sentence_manager/update', sentence_id, patch });
+    return await this._hass.callWS({ type: 'ha_sentence_manager/update', sentence_id, patch, revision });
   }
-  async _apiDelete(sentence_id) {
+  async _apiDelete(sentence_id, revision) {
+    this._requireSentenceAdmin();
     if (!this._hass) throw new Error('Home Assistant connection not ready');
-    return await this._hass.callWS({ type: 'ha_sentence_manager/delete', sentence_id });
+    return await this._hass.callWS({ type: 'ha_sentence_manager/delete', sentence_id, revision });
   }
   async _apiReload() {
+    this._requireSentenceAdmin();
     if (!this._hass) return;
     try { await this._hass.callWS({ type: 'ha_sentence_manager/reload' }); }
     catch (e) { console.warn('[ha-sentence-manager] reload failed', e); }
@@ -816,6 +873,7 @@ class HASentenceManager extends HTMLElement {
     const items = await this._apiList(this._currentLanguage || null);
     this.sentences = items.map(item => ({
       id: item.id,
+      revision: item.revision,
       language: item.language,
       intent: item.intent,
       trigger: (item.sentences && item.sentences[0]) || '',
@@ -1007,43 +1065,60 @@ class HASentenceManager extends HTMLElement {
   exportAsYaml() {
     let yaml = 'custom_sentences:\n';
     this.sentences.forEach(sentence => {
-      yaml += `  - trigger: "${sentence.trigger}"\n`;
+      yaml += `  - trigger: ${JSON.stringify(sentence.trigger)}\n`;
       yaml += `    intents:\n`;
       yaml += `      - intent: ${sentence.intent}\n`;
       if (Object.keys(sentence.slots).length > 0) {
         yaml += `        slots:\n`;
         Object.entries(sentence.slots).forEach(([name, type]) => {
-          yaml += `          ${name}: ${type}\n`;
+          yaml += `          ${name}: ${JSON.stringify(type)}\n`;
         });
       }
       if (sentence.response) {
-        yaml += `    response: "${sentence.response}"\n`;
+        yaml += `    response: ${JSON.stringify(sentence.response)}\n`;
       }
     });
     return yaml;
   }
 
   async importFromYaml(yamlText) {
+    if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     try {
       const lines = yamlText.split('\n');
       const imported = [];
       let currentSentence = null;
+      let slotIndent = null;
+      // The card's export format uses JSON-compatible double-quoted YAML
+      // scalars. Preserve quotes, escapes and colons rather than stripping them.
+      const readScalar = value => {
+        const text = value.trim();
+        if (text.startsWith('"')) return JSON.parse(text);
+        if (text.startsWith("'")) {
+          if (!text.endsWith("'")) throw new Error('Invalid quoted scalar');
+          return text.slice(1, -1).replace(/''/g, "'");
+        }
+        return text;
+      };
 
       lines.forEach(line => {
         const trimmed = line.trim();
+        const indent = line.length - line.trimStart().length;
         if (trimmed.startsWith('- trigger:')) {
           if (currentSentence) imported.push(currentSentence);
-          const trigger = trimmed.replace('- trigger:', '').replace(/['"]/g, '').trim();
-          currentSentence = { trigger, intent: '', slots: {}, response: '' };
-        } else if (trimmed.startsWith('intent:') && currentSentence) {
-          currentSentence.intent = trimmed.replace('intent:', '').trim();
-        } else if (trimmed.match(/^\w+:/) && currentSentence && line.includes(':') && !line.includes('trigger:') && !line.includes('intent:')) {
-          const [key, value] = trimmed.split(':');
-          if (key && value && !['slots', 'response', 'intents'].includes(key)) {
-            currentSentence.slots[key.trim()] = value.trim();
-          }
+          const trigger = readScalar(trimmed.slice('- trigger:'.length));
+          currentSentence = { trigger, intent: '', slots: Object.create(null), response: '' };
+          slotIndent = null;
+        } else if (/^(?:-\s+)?intent:/.test(trimmed) && currentSentence) {
+          currentSentence.intent = readScalar(trimmed.replace(/^(?:-\s+)?intent:/, ''));
+          slotIndent = null;
         } else if (trimmed.startsWith('response:') && currentSentence) {
-          currentSentence.response = trimmed.replace('response:', '').replace(/['"]/g, '').trim();
+          currentSentence.response = readScalar(trimmed.slice('response:'.length));
+          slotIndent = null;
+        } else if (trimmed === 'slots:' && currentSentence) {
+          slotIndent = indent;
+        } else if (slotIndent !== null && indent > slotIndent && /^\w+:/.test(trimmed)) {
+          const colon = trimmed.indexOf(':');
+          currentSentence.slots[trimmed.slice(0, colon)] = readScalar(trimmed.slice(colon + 1));
         }
       });
 
@@ -1085,6 +1160,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   async saveSentence() {
+    if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     const trigger = this.shadowRoot.querySelector('#trigger-input').value.trim();
     const intent = this.shadowRoot.querySelector('#intent-input').value.trim();
     const response = this.shadowRoot.querySelector('#response-input').value.trim();
@@ -1107,6 +1183,7 @@ class HASentenceManager extends HTMLElement {
       if (this.editingId !== null) {
         // Update: replace this row's trigger but keep sibling sentences if any.
         const existing = this.sentences.find(s => s.id === this.editingId);
+        if (!existing?.revision) throw new Error(this._lang === 'pl' ? 'Odśwież listę zdań przed edycją' : 'Reload sentences before editing');
         const all = existing ? existing._allSentences.slice() : [];
         if (all.length === 0) all.push(trigger);
         else all[0] = trigger; // first phrase is the canonical one in v5.0 UI
@@ -1114,7 +1191,7 @@ class HASentenceManager extends HTMLElement {
           sentences: all,
           slots,
           response,
-        });
+        }, existing.revision);
         if (res && res.ok === false) {
           throw new Error(this._lang === 'pl' ? 'serwer nie znalazł zdania do aktualizacji' : 'server could not find the sentence to update');
         }
@@ -1161,7 +1238,15 @@ class HASentenceManager extends HTMLElement {
       this.editingIndex = this.sentences.indexOf(sentence);
     }
     if (!sentence) return;
+    if (!sentence.revision) {
+      this.showNotification(this._lang === 'pl' ? 'Odśwież listę zdań przed usunięciem' : 'Reload sentences before deleting', 'error');
+      return;
+    }
     this.editingId = sentence.id;
+    this.currentTab = 'editor';
+    // Build the editor before filling it: the list has no editor inputs,
+    // and rebuilding after filling would discard the selected sentence.
+    this.render();
     this.shadowRoot.querySelector('#trigger-input').value = sentence.trigger;
     this.shadowRoot.querySelector('#intent-input').value = sentence.intent;
     this.shadowRoot.querySelector('#response-input').value = sentence.response || '';
@@ -1174,18 +1259,17 @@ class HASentenceManager extends HTMLElement {
       slotElement.innerHTML = `
         <label>${_esc(name)}:</label>
         <input type="text" class="slot-input" data-slot-name="${_esc(name)}" value="${_esc(type)}">
-        <button class="remove-slot-btn">Remove</button>
+        <button class="remove-slot-btn">${this._lang === 'pl' ? 'Usuń' : 'Remove'}</button>
       `;
       slotElement.querySelector('.remove-slot-btn').addEventListener('click', () => slotElement.remove());
       slotsContainer.appendChild(slotElement);
     });
 
-    this.currentTab = 'editor';
-    this.render();
     window.scrollTo(0, 0);
   }
 
   async deleteSentence(indexOrId) {
+    if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     let sentence;
     if (typeof indexOrId === 'number') sentence = this.sentences[indexOrId];
     else sentence = this.sentences.find(s => s.id === indexOrId);
@@ -1193,7 +1277,7 @@ class HASentenceManager extends HTMLElement {
     const promptText = this._lang === 'pl' ? 'Usunąć to zdanie?' : 'Delete this sentence?';
     if (!confirm(promptText)) return;
     try {
-      const res = await this._apiDelete(sentence.id);
+      const res = await this._apiDelete(sentence.id, sentence.revision);
       if (res && res.ok === false) {
         throw new Error(this._lang === 'pl' ? 'serwer nie znalazł zdania do usunięcia' : 'server could not find the sentence to delete');
       }
@@ -1216,7 +1300,7 @@ class HASentenceManager extends HTMLElement {
       slotElement.innerHTML = `
         <label>${_esc(slotName)}:</label>
         <input type="text" class="slot-input" data-slot-name="${_esc(slotName)}" placeholder="e.g., string, number, area">
-        <button class="remove-slot-btn">Remove</button>
+        <button class="remove-slot-btn">${this._lang === 'pl' ? 'Usuń' : 'Remove'}</button>
       `;
       slotElement.querySelector('.remove-slot-btn').addEventListener('click', () => slotElement.remove());
       slotsContainer.appendChild(slotElement);
@@ -1239,11 +1323,15 @@ class HASentenceManager extends HTMLElement {
       slotElement.innerHTML = `
         <label>${_esc(name)}:</label>
         <input type="text" class="slot-input" data-slot-name="${_esc(name)}" value="${_esc(type)}">
-        <button class="remove-slot-btn">Remove</button>
+        <button class="remove-slot-btn">${this._lang === 'pl' ? 'Usuń' : 'Remove'}</button>
       `;
       slotElement.querySelector('.remove-slot-btn').addEventListener('click', () => slotElement.remove());
       slotsContainer.appendChild(slotElement);
     });
+  }
+
+  _supportDismissed() {
+    try { return localStorage.getItem('ha-sentence-manager-support-dismissed') === '1'; } catch (_) { return false; }
   }
 
   render() {
@@ -1276,25 +1364,25 @@ class HASentenceManager extends HTMLElement {
       </div>
 
       <div class="tip-banner ${tipDismissed ? 'hidden' : ''}" id="tip-banner">
-        <button class="tip-dismiss" id="tip-dismiss" aria-label="Dismiss">\u2715</button>
+        <button class="tip-dismiss" id="tip-dismiss" aria-label="${this._lang === 'pl' ? 'Ukryj wskazówki' : 'Dismiss tips'}">\u2715</button>
         <div class="tip-banner-title">💡 ${this._lang === 'pl' ? 'Jak działają komendy głosowe?' : 'How do voice commands work?'}</div>
         <ul>
-          <li><strong>Editor</strong> — ${this._lang === 'pl' ? 'tworzysz zdania (sentences), które HA rozpoznaje jako komendy głosowe.' : 'you create sentences that HA recognizes as voice commands.'}</li>
+          <li><strong>${this._lang === 'pl' ? 'Edytor' : 'Editor'}</strong> — ${this._lang === 'pl' ? 'tworzysz zdania (sentences), które HA rozpoznaje jako komendy głosowe.' : 'you create sentences that HA recognizes as voice commands.'}</li>
           <li><strong>${this._lang === 'pl' ? 'Składnia:' : 'Syntax:'}</strong> ${this._lang === 'pl' ? 'użyj <code>[opcja1|opcja2]</code> dla alternatyw, <code>{slot_name}</code> dla zmiennych.' : 'use <code>[option1|option2]</code> for alternatives, <code>{slot_name}</code> for variables.'}</li>
           <li><strong>Intent</strong> — ${this._lang === 'pl' ? 'nazwa akcji (np. TurnOnLight). HA mapuje intent na automatyzację.' : 'the action name (e.g., TurnOnLight). HA maps the intent to automation.'}</li>
           <li><strong>${this._lang === 'pl' ? 'Test' : 'Test'}</strong> — ${this._lang === 'pl' ? 'testuj zdania w zakładce Test — wyślij tekst do Conversation API.' : 'test sentences in the Test tab — send text to Conversation API.'}</li>
-          <li><strong>Import/Export</strong> — ${this._lang === 'pl' ? 'eksportuj do YAML, importuj z pliku.' : 'export to YAML, import from file.'}</li>
-          <li><strong>${this._lang === 'pl' ? 'Przykład:' : 'Example:'}</strong> <code>${this._lang === 'pl' ? '[włącz|zapal] [światło|lampę]' : '[turn on|light] [light|lamp]'} w/in {room}</code></li>
+          <li><strong>${this._lang === 'pl' ? 'Import/Eksport' : 'Import/Export'}</strong> — ${this._lang === 'pl' ? 'eksportuj do YAML, importuj wklejony YAML.' : 'export to YAML, import pasted YAML.'}</li>
+          <li><strong>${this._lang === 'pl' ? 'Przykład:' : 'Example:'}</strong> <code>${this._lang === 'pl' ? '[włącz|zapal] [światło|lampę]' : '[turn on|light] [light|lamp]'} ${this._lang === 'pl' ? 'w' : 'in'} {room}</code></li>
         </ul>
       </div>
 
       <div class="tabs">
-        <button class="tab-btn ${this.currentTab === 'ha-sentences' ? 'active' : ''}" data-tab="ha-sentences">\u{1F3E0} HA Sentences</button>
-        <button class="tab-btn ${this.currentTab === 'editor' ? 'active' : ''}" data-tab="editor">\u270F\uFE0F Editor</button>
-        <button class="tab-btn ${this.currentTab === 'list' ? 'active' : ''}" data-tab="list">\u{1F4CB} Sentences</button>
-        <button class="tab-btn ${this.currentTab === 'test' ? 'active' : ''}" data-tab="test">\u{1F9EA} Test</button>
-        <button class="tab-btn ${this.currentTab === 'export' ? 'active' : ''}" data-tab="export">\u{1F4E6} Import/Export</button>
-        <button class="tab-btn ${this.currentTab === 'actions' ? 'active' : ''}" data-tab="actions">⚙️ Custom Actions</button>
+        <button class="tab-btn ${this.currentTab === 'ha-sentences' ? 'active' : ''}" aria-pressed="${this.currentTab === 'ha-sentences'}" data-tab="ha-sentences">\u{1F3E0} ${this._lang === 'pl' ? 'Zdania HA' : 'HA Sentences'}</button>
+        <button class="tab-btn ${this.currentTab === 'editor' ? 'active' : ''}" aria-pressed="${this.currentTab === 'editor'}" data-tab="editor">\u270F\uFE0F ${this._lang === 'pl' ? 'Edytor' : 'Editor'}</button>
+        <button class="tab-btn ${this.currentTab === 'list' ? 'active' : ''}" aria-pressed="${this.currentTab === 'list'}" data-tab="list">\u{1F4CB} ${this._lang === 'pl' ? 'Zdania' : 'Sentences'}</button>
+        <button class="tab-btn ${this.currentTab === 'test' ? 'active' : ''}" aria-pressed="${this.currentTab === 'test'}" data-tab="test">\u{1F9EA} ${this._lang === 'pl' ? 'Test' : 'Test'}</button>
+        <button class="tab-btn ${this.currentTab === 'export' ? 'active' : ''}" aria-pressed="${this.currentTab === 'export'}" data-tab="export">\u{1F4E6} ${this._lang === 'pl' ? 'Import/Eksport' : 'Import/Export'}</button>
+        <button class="tab-btn ${this.currentTab === 'actions' ? 'active' : ''}" aria-pressed="${this.currentTab === 'actions'}" data-tab="actions">⚙️ ${this._lang === 'pl' ? 'Własne akcje' : 'Custom Actions'}</button>
       </div>
 
       <div class="tab-content active">
@@ -1418,7 +1506,7 @@ class HASentenceManager extends HTMLElement {
           ` : ''}
         </div>
         <div class="ha-sentences-actions" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-primary" id="import-ha-btn">📥 ${this._lang === 'pl' ? 'Importuj do edytora' : 'Import to editor'}</button>
+          ${this._canManageSentences() ? `<button class="btn btn-primary" id="import-ha-btn">📥 ${this._lang === 'pl' ? 'Importuj do edytora' : 'Import to editor'}</button>` : this._sentenceReadOnlyNotice()}
           <button class="btn btn-secondary" id="reload-ha-btn">🔄 ${this._lang === 'pl' ? 'Odśwież' : 'Refresh'}</button>
         </div>
       `;
@@ -1450,7 +1538,7 @@ class HASentenceManager extends HTMLElement {
           <div class="load-options" style="margin-top:16px;display:grid;gap:12px;">
             <div class="info-card" style="padding:16px;">
               <h4 style="margin-bottom:8px;font-size:14px;">🔍 ${this._lang === 'pl' ? 'Automatyczne wykrywanie' : 'Auto Detection'}</h4>
-              <p class="hint" style="font-size:12px;color:var(--bento-text-muted);margin-bottom:8px;">${this._lang === 'pl' ? 'Testuje znane frazy przez Conversation API, aby wykryć działające intenty.' : 'Tests known phrases via Conversation API to detect working intents.'}</p>
+              <p class="hint" style="font-size:12px;color:var(--bento-text-muted);margin-bottom:8px;">${this._lang === 'pl' ? 'Odczytuje zapisane zdania z integracji bez uruchamiania komend głosowych.' : 'Reads saved sentences from the integration without running voice commands.'}</p>
               <button class="btn btn-primary" id="detect-ha-btn">🔍 ${this._lang === 'pl' ? 'Wykryj automatycznie' : 'Auto Detect'}</button>
               <span id="detect-status" style="margin-left:8px;font-size:12px;color:var(--bento-text-muted);"></span>
             </div>
@@ -1475,17 +1563,7 @@ class HASentenceManager extends HTMLElement {
 
           </div>
         
-        <!-- Support / Donation -->
-        <div class="donate-section" data-source="ha-tools-split">
-          <div class="donate-text">
-            <h3>❤️ ${this._lang === 'pl' ? 'Wesprzyj rozwój HA Tools' : 'Support HA Tools Development'}</h3>
-            <p>${this._lang === 'pl' ? 'Jeśli to narzędzie ułatwia Ci życie z Home Assistant, rozważ wsparcie projektu. Każda kawa motywuje do dalszego rozwoju!' : 'If this tool makes your Home Assistant life easier, consider supporting the project. Every coffee motivates further development!'}</p>
-          </div>
-          <div class="donate-buttons">
-            <a class="donate-btn coffee" href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">☕ Buy Me a Coffee</a>
-            <a class="donate-btn paypal" href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">💳 PayPal</a>
-          </div>
-        </div>
+        ${this._hass?.user?.is_admin && this.config?.show_support !== false && !this._supportDismissed() ? `<div class="donate-section" data-source="own-card" style="margin:8px 0 0;padding:4px 0;background:none;border:0;box-shadow:none;min-height:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-direction:row;justify-content:flex-start;text-align:left"><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--secondary-text-color,#64748b);font-weight:400;text-decoration:underline">${this._lang === 'pl' ? 'Opcjonalne wsparcie HA Tools' : 'Optional support for HA Tools'}</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto;padding:2px 6px;min-height:0;line-height:1;border:0;background:none;color:var(--secondary-text-color,#64748b);cursor:pointer">×</button></div>` : ''}
         </div>
       `;
     }
@@ -1493,7 +1571,7 @@ class HASentenceManager extends HTMLElement {
     return `
       <div class="tab-panel ${isActive ? 'active' : ''}" data-tab-content="ha-sentences">
         <div class="ha-sentences-section">
-          <h2>🏠 HA Custom Sentences</h2>
+          <h2>🏠 ${this._lang === 'pl' ? 'Własne zdania HA' : 'HA Custom Sentences'}</h2>
           <p class="section-desc">${this._lang === 'pl' ? 'Niestandardowe komendy głosowe skonfigurowane w Home Assistant.' : 'Custom voice commands configured in Home Assistant.'}</p>
           ${contentHtml}
           <div style="margin-top:20px;padding:16px;background:var(--bento-bg,#f8fafc);border:1px solid var(--bento-border,#e2e8f0);border-radius:10px">
@@ -1521,6 +1599,7 @@ class HASentenceManager extends HTMLElement {
 
   // Import HA's existing custom-sentence definitions into the integration store
   async _importHaSentencesToEditor() {
+    if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     if (!this._haSentences || !this._haSentences.intents) return;
     const language = (this._currentLanguage || this._hass?.config?.language || 'en');
     const toCreate = [];
@@ -1574,55 +1653,56 @@ class HASentenceManager extends HTMLElement {
   }
 
   renderEditor() {
+    if (!this._canManageSentences()) return this._sentenceReadOnlyNotice();
     return `
       <div class="tab-panel ${this.currentTab === 'editor' ? 'active' : ''}" data-tab-content="editor">
         <div class="editor-section">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-            <h2 style="margin:0;">${this.editingIndex !== null ? '\u270F\uFE0F Edytuj zdanie' : '\u2795 Nowe zdanie'}</h2>
+            <h2 style="margin:0;">${this.editingIndex !== null ? (this._lang === 'pl' ? '✏️ Edytuj zdanie' : '✏️ Edit sentence') : (this._lang === 'pl' ? '➕ Nowe zdanie' : '➕ New sentence')}</h2>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0;">
               <select id="sentence-selector" style="min-width:220px;padding:8px 12px;font-size:13px;border-radius:var(--bento-radius-sm);border:1.5px solid var(--bento-border);background:var(--bento-card);color:var(--bento-text);">
-                <option value="">Wybierz zdanie do edycji...</option>
+                <option value="">${this._lang === 'pl' ? 'Wybierz zdanie do edycji...' : 'Choose a sentence to edit...'}</option>
                 ${this.sentences.map((s, i) => `<option value="${i}">${_esc(s.trigger.substring(0, 50))}${s.trigger.length > 50 ? '...' : ''} [${_esc(s.intent)}]</option>`).join('')}
               </select>
-              <button class="btn btn-secondary" id="new-sentence-btn" style="white-space:nowrap;">+ Nowe</button>
+              <button class="btn btn-secondary" id="new-sentence-btn" style="white-space:nowrap;">${this._lang === 'pl' ? '+ Nowe' : '+ New'}</button>
             </div>
           </div>
 
           <div class="form-group">
-            <label for="trigger-input">Trigger Sentence (use {slot} for placeholders)</label>
-            <input type="text" id="trigger-input" placeholder="e.g., Turn on {area} lights" class="trigger-input">
+            <label for="trigger-input">${this._lang === 'pl' ? 'Zdanie wywołujące (użyj {slot} dla zmiennych)' : 'Trigger Sentence (use {slot} for placeholders)'}</label>
+            <input type="text" id="trigger-input" placeholder="${this._lang === 'pl' ? 'np. Włącz światło w {area}' : 'e.g., Turn on {area} lights'}" class="trigger-input">
             <div class="preview-slots"></div>
           </div>
 
           <div class="form-group">
-            <label for="intent-input">Intent Name</label>
-            <input type="text" id="intent-input" placeholder="e.g., turn_on" class="intent-input">
+            <label for="intent-input">${this._lang === 'pl' ? 'Nazwa intentu' : 'Intent Name'}</label>
+            <input type="text" id="intent-input" placeholder="${this._lang === 'pl' ? 'np. turn_on' : 'e.g., turn_on'}" class="intent-input">
           </div>
 
           <div class="form-group">
-            <label>Slots Definition</label>
+            <label>${this._lang === 'pl' ? 'Definicje zmiennych' : 'Slots Definition'}</label>
             <div id="slots-container" class="slots-container"></div>
-            <button class="btn btn-secondary" id="add-slot-btn">+ Add Slot</button>
+            <button class="btn btn-secondary" id="add-slot-btn">${this._lang === 'pl' ? '+ Dodaj zmienną' : '+ Add Slot'}</button>
           </div>
 
           <div class="form-group">
-            <label for="response-input">Response Template (optional)</label>
-            <input type="text" id="response-input" placeholder="e.g., {area} lights are now on" class="response-input">
+            <label for="response-input">${this._lang === 'pl' ? 'Szablon odpowiedzi (opcjonalny)' : 'Response Template (optional)'}</label>
+            <input type="text" id="response-input" placeholder="${this._lang === 'pl' ? 'np. Światło w {area} jest włączone' : 'e.g., {area} lights are now on'}" class="response-input">
           </div>
 
           <div class="template-library">
-            <p>Quick Templates:</p>
-            <button class="btn btn-template" data-template="lights">Lights</button>
-            <button class="btn btn-template" data-template="climate">Climate</button>
-            <button class="btn btn-template" data-template="media">Media</button>
-            <button class="btn btn-template" data-template="covers">Covers</button>
-            <button class="btn btn-template" data-template="locks">Locks</button>
-            <button class="btn btn-template" data-template="scenes">Scenes</button>
+            <p>${this._lang === 'pl' ? 'Gotowe szablony:' : 'Quick Templates:'}</p>
+            <button class="btn btn-template" data-template="lights">${this._lang === 'pl' ? 'Światła' : 'Lights'}</button>
+            <button class="btn btn-template" data-template="climate">${this._lang === 'pl' ? 'Klimat' : 'Climate'}</button>
+            <button class="btn btn-template" data-template="media">${this._lang === 'pl' ? 'Media' : 'Media'}</button>
+            <button class="btn btn-template" data-template="covers">${this._lang === 'pl' ? 'Osłony' : 'Covers'}</button>
+            <button class="btn btn-template" data-template="locks">${this._lang === 'pl' ? 'Zamki' : 'Locks'}</button>
+            <button class="btn btn-template" data-template="scenes">${this._lang === 'pl' ? 'Sceny' : 'Scenes'}</button>
           </div>
 
           <div class="form-actions">
-            <button class="btn btn-primary" id="save-btn">Save Sentence</button>
-            <button class="btn btn-secondary" id="clear-btn">Clear</button>
+            <button class="btn btn-primary" id="save-btn">${this._lang === 'pl' ? 'Zapisz zdanie' : 'Save Sentence'}</button>
+            <button class="btn btn-secondary" id="clear-btn">${this._lang === 'pl' ? 'Wyczyść' : 'Clear'}</button>
           </div>
         </div>
       </div>
@@ -1634,10 +1714,10 @@ class HASentenceManager extends HTMLElement {
     return `
       <div class="tab-panel ${this.currentTab === 'list' ? 'active' : ''}" data-tab-content="list">
         <div class="list-section">
-          <h2>Custom Sentences</h2>
-          <input type="text" id="search-input" placeholder="Search sentences..." class="search-input">
+          <h2>${this._lang === 'pl' ? 'Własne zdania' : 'Custom Sentences'}</h2>
+          <input type="text" id="search-input" placeholder="${this._lang === 'pl' ? 'Szukaj zdań...' : 'Search sentences...'}" class="search-input">
           <div class="sentences-list">
-            ${this.sentences.length === 0 ? '<p class="empty-state">No sentences yet. Create one in the editor!</p>' : ''}
+            ${this.sentences.length === 0 ? (this._lang === 'pl' ? '<p class="empty-state">Brak zdań. Utwórz pierwsze w edytorze.</p>' : '<p class="empty-state">No sentences yet. Create one in the editor!</p>') : ''}
             ${grouped.map(group => `
               <div class="sentence-group">
                 <h3 class="group-header">${_esc(group.intent)}</h3>
@@ -1645,12 +1725,12 @@ class HASentenceManager extends HTMLElement {
                   <div class="sentence-item">
                     <div class="sentence-content">
                       <div class="sentence-trigger">${this.highlightSlots(s.trigger)}</div>
-                      ${s.response ? `<div class="sentence-response">Response: ${_esc(s.response)}</div>` : ''}
+                      ${s.response ? `<div class="sentence-response">${this._lang === 'pl' ? 'Odpowiedź:' : 'Response:'} ${_esc(s.response)}</div>` : ''}
                     </div>
-                    <div class="sentence-actions">
-                      <button class="btn btn-small" data-edit="${this.sentences.indexOf(s)}">Edit</button>
-                      <button class="btn btn-small btn-danger" data-delete="${this.sentences.indexOf(s)}">Delete</button>
-                    </div>
+                    ${this._canManageSentences() ? `<div class="sentence-actions">
+                      <button class="btn btn-small" data-edit="${this.sentences.indexOf(s)}">${this._lang === 'pl' ? 'Edytuj' : 'Edit'}</button>
+                      <button class="btn btn-small btn-danger" data-delete="${this.sentences.indexOf(s)}">${this._lang === 'pl' ? 'Usuń' : 'Delete'}</button>
+                    </div>` : ''}
                   </div>
                 `).join('')}
               </div>
@@ -1717,7 +1797,7 @@ class HASentenceManager extends HTMLElement {
     return `
       <div class="tab-panel ${this.currentTab === 'test' ? 'active' : ''}" data-tab-content="test">
         <div class="test-section">
-          <h2>🧪 ${this._lang === 'pl' ? 'Test Sentence' : 'Test Sentence'}</h2>
+          <h2>🧪 ${this._lang === 'pl' ? 'Test zdania' : 'Test Sentence'}</h2>
           <p class="section-desc">${this._lang === 'pl' ? 'Testuj zdania bezpośrednio przez Home Assistant Conversation API.' : 'Test sentences directly via Home Assistant Conversation API.'}</p>
 
           <!-- Try it: HA Conversation intent tester -->
@@ -1761,19 +1841,19 @@ class HASentenceManager extends HTMLElement {
     return `
       <div class="tab-panel ${this.currentTab === 'export' ? 'active' : ''}" data-tab-content="export">
         <div class="export-section">
-          <h2>Import / Export</h2>
+          <h2>${this._lang === 'pl' ? 'Import / Eksport' : 'Import / Export'}</h2>
 
           <div class="export-container">
-            <h3>Export as YAML</h3>
+            <h3>${this._lang === 'pl' ? 'Eksport do YAML' : 'Export as YAML'}</h3>
             <textarea id="yaml-output" class="yaml-editor" readonly>${_esc(this.exportAsYaml())}</textarea>
-            <button class="btn btn-primary" id="copy-yaml-btn">Copy to Clipboard</button>
+            <button class="btn btn-primary" id="copy-yaml-btn">${this._lang === 'pl' ? 'Kopiuj do schowka' : 'Copy to Clipboard'}</button>
           </div>
 
-          <div class="import-container">
-            <h3>Import from YAML</h3>
-            <textarea id="yaml-input" class="yaml-editor" placeholder="Paste YAML here..."></textarea>
-            <button class="btn btn-primary" id="import-yaml-btn">Import Sentences</button>
-          </div>
+          ${this._canManageSentences() ? `<div class="import-container">
+            <h3>${this._lang === 'pl' ? 'Import z YAML' : 'Import from YAML'}</h3>
+            <textarea id="yaml-input" class="yaml-editor" placeholder="${this._lang === 'pl' ? 'Wklej YAML tutaj...' : 'Paste YAML here...'}"></textarea>
+            <button class="btn btn-primary" id="import-yaml-btn">${this._lang === 'pl' ? 'Importuj zdania' : 'Import Sentences'}</button>
+          </div>` : this._sentenceReadOnlyNotice()}
         </div>
       </div>
     `;
@@ -1795,6 +1875,15 @@ class HASentenceManager extends HTMLElement {
   }
 
   attachEventListeners() {
+    this.shadowRoot.getElementById('btn-generate-action')?.addEventListener('click', () => this._generateActionYaml());
+    this.shadowRoot.getElementById('btn-copy-action-yaml')?.addEventListener('click', () => this._copyActionYaml());
+    for (const id of ['action-trigger', 'action-trigger-en', 'action-service', 'action-entity']) {
+      this.shadowRoot.getElementById(id)?.addEventListener('input', () => this._clearActionYaml());
+    }
+    this.shadowRoot.querySelector('.support-dismiss')?.addEventListener('click', () => {
+      try { localStorage.setItem('ha-sentence-manager-support-dismissed', '1'); } catch (_) {}
+      this.render();
+    });
     // Tip banner dismiss
     const _tipB = this.shadowRoot.querySelector('#tip-banner');
     if (_tipB) {
@@ -1817,7 +1906,11 @@ class HASentenceManager extends HTMLElement {
         this.currentTab = e.target.dataset.tab;
         history.replaceState(null, '', location.pathname + '#' + this._toolId + '/' + this.currentTab);
         // Update tab buttons active state without full re-render
-        this.shadowRoot.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === this.currentTab));
+        this.shadowRoot.querySelectorAll('.tab-btn').forEach(b => {
+          const active = b.dataset.tab === this.currentTab;
+          b.classList.toggle('active', active);
+          b.setAttribute('aria-pressed', String(active));
+        });
         // Update only tab content
         let tabHtml = '';
         switch (this.currentTab) {
@@ -1943,7 +2036,7 @@ class HASentenceManager extends HTMLElement {
       const textarea = this.shadowRoot.querySelector('#yaml-output');
       textarea.select();
       document.execCommand('copy');
-      this.showNotification('YAML copied to clipboard', 'success');
+      this.showNotification(this._lang === 'pl' ? 'YAML skopiowany do schowka' : 'YAML copied to clipboard', 'success');
     });
 
     this.shadowRoot.querySelector('#import-yaml-btn')?.addEventListener('click', () => {
@@ -1951,7 +2044,7 @@ class HASentenceManager extends HTMLElement {
       if (yaml.trim()) {
         this.importFromYaml(yaml);
       } else {
-        this.showNotification('Paste YAML first', 'error');
+        this.showNotification(this._lang === 'pl' ? 'Najpierw wklej YAML' : 'Paste YAML first', 'error');
       }
     });
   }
@@ -1993,7 +2086,7 @@ class HASentenceManager extends HTMLElement {
 
 /* Donation footer — diamond top */
 .donate-section {  margin: 24px 0 4px; padding: 20px 24px; position: relative; overflow: hidden;  background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(236,72,153,0.06));  border: 1px solid rgba(99,102,241,0.18); border-radius: var(--bento-radius-md, 18px);  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px;  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;}
-.donate-section::before {  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);}
+.donate-section:not([data-source="own-card"])::before {  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);}
 .donate-section .donate-text { flex: 1; min-width: 240px; }
 .donate-section h3 {  margin: 0 0 6px; font-size: 16px; font-weight: 700; letter-spacing: -0.02em;  background: linear-gradient(135deg, #6366f1, #ec4899);  -webkit-background-clip: text; background-clip: text; color: transparent;}
 .donate-section p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--bento-text-secondary, #57534e); letter-spacing: -0.005em; }
@@ -2603,6 +2696,8 @@ canvas {
 
         .sentence-item {
           display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
           justify-content: space-between;
           align-items: center;
           padding: 12px;
@@ -2618,7 +2713,9 @@ canvas {
         }
 
         .sentence-content {
-          flex: 1;
+          flex: 1 1 220px;
+          min-width: 0;
+          overflow-wrap: anywhere;
         }
 
         .sentence-trigger {
@@ -2635,8 +2732,9 @@ canvas {
 
         .sentence-actions {
           display: flex;
+          flex-wrap: wrap;
           gap: 4px;
-          margin-left: 12px;
+          margin-left: 0;
         }
 
         .search-input {
@@ -3138,28 +3236,71 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     `;
   }
 
+  _clearActionYaml() {
+    this._generatedActionYaml = '';
+    const output = this.shadowRoot.getElementById('action-yaml-output');
+    if (output) output.style.display = 'none';
+    const code = this.shadowRoot.getElementById('action-yaml-code');
+    if (code) code.textContent = '';
+  }
+
+  _generateActionYaml() {
+    const value = id => this.shadowRoot.getElementById(id)?.value.trim() || '';
+    const commands = [...new Set([value('action-trigger'), value('action-trigger-en')].filter(Boolean))];
+    const service = value('action-service'), entity = value('action-entity');
+    this._clearActionYaml();
+    if (!commands.length || !/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/.test(service) ||
+        (entity && !/^[a-z_][a-z0-9_]*\.[a-z0-9_]+$/.test(entity))) {
+      this.showNotification(this._lang === 'pl'
+        ? 'Podaj co najmniej jedną frazę, usługę domain.action i opcjonalnie poprawne ID encji.'
+        : 'Enter at least one phrase, a domain.action service and an optional valid entity ID.', 'error');
+      return;
+    }
+    // JSON strings are quoted YAML scalars: punctuation, line breaks and HTML stay literal.
+    const lines = [`alias: ${JSON.stringify(commands[0])}`, 'triggers:', '  - trigger: conversation', '    command:',
+      ...commands.map(command => `      - ${JSON.stringify(command)}`), 'conditions: []', 'actions:',
+      `  - action: ${service}`];
+    if (entity) lines.push('    target:', `      entity_id: ${entity}`);
+    lines.push('mode: single');
+    this._generatedActionYaml = lines.join('\n') + '\n';
+    this.shadowRoot.getElementById('action-yaml-code').textContent = this._generatedActionYaml;
+    this.shadowRoot.getElementById('action-yaml-output').style.display = 'block';
+  }
+
+  async _copyActionYaml() {
+    if (!this._generatedActionYaml) return;
+    try {
+      await navigator.clipboard.writeText(this._generatedActionYaml);
+      this.showNotification(this._lang === 'pl' ? 'YAML skopiowany do schowka' : 'YAML copied to clipboard', 'success');
+    } catch (_) {
+      this.showNotification(this._lang === 'pl'
+        ? 'Nie można skopiować do schowka. Zaznacz i skopiuj wygenerowany YAML.'
+        : 'Could not copy to the clipboard. Select and copy the generated YAML.', 'error');
+    }
+  }
+
   _renderActionsTab() {
     const defaultActions = [
-      { intent: 'HassLightSet', slots: 'name, brightness, color', desc: 'Steruj swiatlem — wlacz, wylacz, jasnosc, kolor' },
-      { intent: 'HassTurnOn', slots: 'name', desc: 'Wlacz dowolny urzadzenie (switch, fan, media_player...)' },
-      { intent: 'HassTurnOff', slots: 'name', desc: 'Wylacz dowolne urzadzenie' },
-      { intent: 'HassClimateSetTemperature', slots: 'name, temperature', desc: 'Ustaw temperature klimatyzacji/ogrzewania' },
-      { intent: 'HassMediaPause', slots: 'name', desc: 'Pauza media player' },
-      { intent: 'HassMediaNext', slots: 'name', desc: 'Nastepny utwor' },
-      { intent: 'HassVacuumStart', slots: 'name', desc: 'Uruchom odkurzacz' },
-      { intent: 'HassSetPosition', slots: 'name, position', desc: 'Ustaw pozycje rolety/zaslony' },
+      { intent: 'HassLightSet', slots: 'name, brightness, color', desc: this._lang === 'pl' ? 'Steruj światłem — włącz, wyłącz, jasność, kolor' : 'Control lights — on, off, brightness, color' },
+      { intent: 'HassTurnOn', slots: 'name', desc: this._lang === 'pl' ? 'Włącz urządzenie (switch, fan, media_player...)' : 'Turn on a device (switch, fan, media_player...)' },
+      { intent: 'HassTurnOff', slots: 'name', desc: this._lang === 'pl' ? 'Wyłącz urządzenie' : 'Turn off a device' },
+      { intent: 'HassClimateSetTemperature', slots: 'name, temperature', desc: this._lang === 'pl' ? 'Ustaw temperaturę klimatyzacji/ogrzewania' : 'Set the heating/cooling temperature' },
+      { intent: 'HassMediaPause', slots: 'name', desc: this._lang === 'pl' ? 'Wstrzymaj odtwarzanie' : 'Pause playback' },
+      { intent: 'HassMediaNext', slots: 'name', desc: this._lang === 'pl' ? 'Następny utwór' : 'Next track' },
+      { intent: 'HassVacuumStart', slots: 'name', desc: this._lang === 'pl' ? 'Uruchom odkurzacz' : 'Start the vacuum' },
+      { intent: 'HassSetPosition', slots: 'name, position', desc: this._lang === 'pl' ? 'Ustaw pozycję rolety/zasłony' : 'Set the cover position' },
     ];
 
     const customActions = this._customActions || [];
 
-    let html = '<div class="section-title">⚙️ Custom Actions Panel</div>';
+    let html = `<div class="section-title">⚙️ ${this._lang === 'pl' ? 'Własne akcje' : 'Custom Actions Panel'}</div>`;
     html += `<p style="color:var(--bento-text-secondary,#64748b);font-size:13px;margin-bottom:16px;">${this._t.customActionDesc}</p>`;
 
     // Built-in intents reference
-    html += '<div class="section-title" style="margin-top:20px;">📋 Built-in HA Intents (reference)</div>';
+    html += `<div class="section-title" style="margin-top:20px;">📋 ${this._lang === 'pl' ? 'Wbudowane intenty HA (przegląd)' : 'Built-in HA Intents (reference)'}</div>`;
     html += '<div style="overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid var(--bento-border,#e2e8f0);">';
     html += '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:0;">';
-    html += '<thead><tr><th style="text-align:left;padding:8px;border-bottom:2px solid var(--bento-border,#e2e8f0);">Intent</th><th style="text-align:left;padding:8px;border-bottom:2px solid var(--bento-border,#e2e8f0);">Slots</th><th style="text-align:left;padding:8px;border-bottom:2px solid var(--bento-border,#e2e8f0);">Opis</th></tr></thead><tbody>';
+    html += `<thead><tr><th style="text-align:left;padding:8px;border-bottom:2px solid var(--bento-border,#e2e8f0);">Intent</th><th style="text-align:left;padding:8px;border-bottom:2px solid var(--bento-border,#e2e8f0);">${this._lang === 'pl' ? 'Zmienne' : 'Slots'}</th><th style="text-align:left;padding:8px;border-bottom:2px solid var(--bento-border,#e2e8f0);">${this._lang === 'pl' ? 'Opis' : 'Description'}</th></tr></thead><tbody>`;
     defaultActions.forEach(a => {
       html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--bento-border,#e2e8f0);"><code>${a.intent}</code></td><td style="padding:6px 8px;border-bottom:1px solid var(--bento-border,#e2e8f0);font-size:12px;">${a.slots}</td><td style="padding:6px 8px;border-bottom:1px solid var(--bento-border,#e2e8f0);font-size:12px;color:var(--bento-text-secondary,#64748b);">${a.desc}</td></tr>`;
     });
@@ -3167,29 +3308,29 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     html += '<div style="margin-bottom:20px;"></div>';
 
     // Custom action builder
-    html += '<div class="section-title" style="margin-top:24px;">🛠️ Create Custom Action</div>';
+    html += `<div class="section-title" style="margin-top:24px;">🛠️ ${this._lang === 'pl' ? 'Utwórz własną akcję' : 'Create Custom Action'}</div>`;
     html += '<div style="background:var(--bento-bg,#f8fafc);border:1.5px solid var(--bento-border,#e2e8f0);border-radius:12px;padding:16px;margin-bottom:16px;">';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">';
-    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">Trigger phrase (PL)</label><input type="text" id="action-trigger" placeholder="${this._t.triggerPhraseEg}" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
-    html += '<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">Trigger phrase (EN)</label><input type="text" id="action-trigger-en" placeholder="e.g. turn on movie mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>';
+    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'Fraza wywołująca (PL)' : 'Trigger phrase (PL)'}</label><input type="text" id="action-trigger" placeholder="${this._t.triggerPhraseEg}" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
+    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'Fraza wywołująca (EN)' : 'Trigger phrase (EN)'}</label><input type="text" id="action-trigger-en" placeholder="e.g. turn on movie mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
     html += '</div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">';
-    html += '<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">HA Service</label><input type="text" id="action-service" placeholder="np. scene.turn_on, script.movie_mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>';
-    html += '<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">Entity ID</label><input type="text" id="action-entity" placeholder="np. scene.movie_mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>';
+    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'Usługa HA' : 'HA Service'}</label><input type="text" id="action-service" placeholder="${this._lang === 'pl' ? 'np.' : 'e.g.,'} scene.turn_on, script.movie_mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
+    html += `<div><label style="font-size:12px;font-weight:600;color:var(--bento-text-secondary,#64748b);display:block;margin-bottom:4px;">${this._lang === 'pl' ? 'ID encji' : 'Entity ID'}</label><input type="text" id="action-entity" placeholder="${this._lang === 'pl' ? 'np.' : 'e.g.,'} scene.movie_mode" style="width:100%;padding:8px 12px;border:1.5px solid var(--bento-border,#e2e8f0);border-radius:8px;font-size:13px;box-sizing:border-box;"></div>`;
     html += '</div>';
-    html += '<button class="btn-primary" id="btn-generate-action" style="margin-top:8px;">📝 Generate YAML</button>';
+    html += `<button class="btn-primary" id="btn-generate-action" style="margin-top:8px;">📝 ${this._lang === 'pl' ? 'Generuj YAML' : 'Generate YAML'}</button>`;
     html += '</div>';
 
     // Generated YAML output
-    html += '<div id="action-yaml-output" style="display:none;margin-top:16px;">';
-    html += '<div class="section-title">📄 Generated YAML</div>';
-    html += '<pre id="action-yaml-code" style="background:#1e293b;color:#e2e8f0;padding:16px;border-radius:10px;font-size:12px;overflow-x:auto;line-height:1.6;"></pre>';
-    html += '<button class="btn-secondary" id="btn-copy-action-yaml" style="margin-top:8px;">📋 Copy to Clipboard</button>';
+    html += `<div id="action-yaml-output" style="display:${this._generatedActionYaml ? 'block' : 'none'};margin-top:16px;">`;
+    html += `<div class="section-title">📄 ${this._lang === 'pl' ? 'Wygenerowany YAML' : 'Generated YAML'}</div>`;
+    html += `<pre id="action-yaml-code" style="background:#1e293b;color:#e2e8f0;padding:16px;border-radius:10px;font-size:12px;overflow-x:auto;line-height:1.6;">${_esc(this._generatedActionYaml || '')}</pre>`;
+    html += `<button class="btn-secondary" id="btn-copy-action-yaml" style="margin-top:8px;">📋 ${this._lang === 'pl' ? 'Kopiuj do schowka' : 'Copy to Clipboard'}</button>`;
     html += '</div>';
 
     // Saved custom actions list
     if (customActions.length > 0) {
-      html += '<div class="section-title" style="margin-top:24px;">💾 Saved Actions (' + customActions.length + ')</div>';
+      html += '<div class="section-title" style="margin-top:24px;">💾 ' + (this._lang === 'pl' ? 'Zapisane akcje' : 'Saved Actions') + ' (' + customActions.length + ')</div>';
       customActions.forEach((a, idx) => {
         html += `<div style="padding:10px 14px;background:var(--bento-bg,#f8fafc);border:1px solid var(--bento-border,#e2e8f0);border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"><div><strong style="font-size:13px;">"${_esc(a.trigger)}"</strong> <span style="font-size:12px;color:var(--bento-text-secondary,#64748b);">⚡ ${_esc(a.service)} (${_esc(a.entity)})</span></div><button class="btn-danger-sm" data-remove-action="${idx}" style="padding:4px 10px;font-size:11px;border-radius:6px;background:var(--bento-error,#ef4444);color:white;border:none;cursor:pointer;">🗑️</button></div>`;
       });

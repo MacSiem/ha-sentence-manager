@@ -26,7 +26,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
-from .storage import SentenceStorage
+from .storage import SentenceConflictError, SentenceStorage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,6 +103,7 @@ async def _ws_create(
         vol.Required("type"): "ha_sentence_manager/update",
         vol.Required("sentence_id"): str,
         vol.Required("patch"): dict,
+        vol.Required("revision"): str,
     }
 )
 @websocket_api.require_admin
@@ -114,7 +115,10 @@ async def _ws_update(
 ) -> None:
     """Patch sentences / slots / response on an existing entry."""
     try:
-        ok = await _storage(hass).update(msg["sentence_id"], msg["patch"])
+        ok = await _storage(hass).update(msg["sentence_id"], msg["patch"], msg["revision"])
+    except SentenceConflictError as err:
+        connection.send_error(msg["id"], "conflict", str(err))
+        return
     except Exception as err:  # noqa: BLE001
         _LOGGER.exception("update failed: %s", err)
         connection.send_error(msg["id"], "update_failed", str(err))
@@ -126,6 +130,7 @@ async def _ws_update(
     {
         vol.Required("type"): "ha_sentence_manager/delete",
         vol.Required("sentence_id"): str,
+        vol.Required("revision"): str,
     }
 )
 @websocket_api.require_admin
@@ -137,7 +142,10 @@ async def _ws_delete(
 ) -> None:
     """Delete an entry; the file is removed when it ends up empty."""
     try:
-        ok = await _storage(hass).delete(msg["sentence_id"])
+        ok = await _storage(hass).delete(msg["sentence_id"], msg["revision"])
+    except SentenceConflictError as err:
+        connection.send_error(msg["id"], "conflict", str(err))
+        return
     except Exception as err:  # noqa: BLE001
         _LOGGER.exception("delete failed: %s", err)
         connection.send_error(msg["id"], "delete_failed", str(err))
