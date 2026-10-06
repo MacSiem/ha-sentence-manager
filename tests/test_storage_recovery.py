@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from .test_storage import SentenceStorage, _FakeHass
+from tests.test_storage import SentenceStorage, _FakeHass
 
 
 class RecoveryTests(unittest.TestCase):
@@ -76,4 +76,3 @@ class RecoveryTests(unittest.TestCase):
         outside.write_text("language: en\nintents:\n  Private:\n    data:\n      - sentences: [private text]\n")
         os.symlink(outside, Path(self.path).parent / "ha_sentence_manager_Private.yaml")
         self.assertEqual([r["id"] for r in self.rows()], [self.a, self.b])
-
