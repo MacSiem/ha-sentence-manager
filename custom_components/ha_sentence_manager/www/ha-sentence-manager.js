@@ -1789,13 +1789,16 @@ class HASentenceManager extends HTMLElement {
 
   renderList() {
     const grouped = this.groupBySentenceIntent();
+    const emptyMessage = this._lang === 'pl'
+      ? (this._canManageSentences() ? 'Brak zdań. Utwórz pierwsze w edytorze.' : 'Brak zdań. Administrator może dodać je w edytorze.')
+      : (this._canManageSentences() ? 'No sentences yet. Create one in the editor!' : 'No sentences yet. An administrator can add them in the editor.');
     return `
       <div class="tab-panel ${this.currentTab === 'list' ? 'active' : ''}" data-tab-content="list">
         <div class="list-section">
           <h2>${this._lang === 'pl' ? 'Własne zdania' : 'Custom Sentences'}</h2>
           <input type="text" id="search-input" placeholder="${this._lang === 'pl' ? 'Szukaj zdań...' : 'Search sentences...'}" class="search-input">
           <div class="sentences-list">
-            ${this.sentences.length === 0 && !this._apiError ? (this._lang === 'pl' ? '<p class="empty-state">Brak zdań. Utwórz pierwsze w edytorze.</p>' : '<p class="empty-state">No sentences yet. Create one in the editor!</p>') : ''}
+            ${this.sentences.length === 0 && !this._apiError ? `<p class="empty-state">${emptyMessage}</p>` : ''}
             ${grouped.map(group => `
               <div class="sentence-group">
                 <h3 class="group-header">${_esc(group.intent)}</h3>
