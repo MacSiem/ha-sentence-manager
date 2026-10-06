@@ -52,3 +52,13 @@ test('failed HA sentence read shows an error, then a successful retry clears it'
     assert.equal(card._apiError,null);
   } finally {dom.window.close();}
 });
+
+test('Assist error response is displayed as a failed test',async()=>{
+  const {dom,card,hass}=fixture();
+  try {
+    hass.callWS=async()=>({response:{response_type:'error',speech:{plain:{speech:'No matching intent'}},data:{code:'no_intent_match'}}});
+    await card._testSentenceHA('qa unmatched phrase');
+    assert.equal(card._testResultHA.success,false);
+    assert.equal(card._testResultHA.responseType,'error');
+  } finally {dom.window.close();}
+});
