@@ -82,8 +82,8 @@ class RecoveryTests(unittest.TestCase):
         async def executor(method, *args):
             return method(*args)
         self.hass.async_add_executor_job = executor
-        async def roundtrip():
-            sid = await self.storage.create({"language":"en", "intent":"QA:literal", "sentences":["literal phrase"]})
+        async def roundtrip(language):
+            sid = await self.storage.create({"language":language, "intent":"QA:literal", "sentences":["literal phrase"]})
             row = await self.storage.get_one(sid)
             self.assertIsNotNone(row)
             self.assertTrue(await self.storage.update(sid, {"response":"literal: answer"}, row["revision"]))
@@ -91,4 +91,5 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(row["response"], "literal: answer")
             self.assertTrue(await self.storage.delete(sid, row["revision"]))
             self.assertIsNone(await self.storage.get_one(sid))
-        asyncio.run(roundtrip())
+        asyncio.run(roundtrip("en"))
+        asyncio.run(roundtrip("en:custom"))
