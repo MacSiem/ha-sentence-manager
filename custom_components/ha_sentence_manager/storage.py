@@ -33,6 +33,7 @@ import stat
 import tempfile
 import threading
 import uuid
+from urllib.parse import quote, unquote
 from typing import Any
 
 import yaml
@@ -114,7 +115,7 @@ class SentenceStorage:
         if not language or not intent or not sentences:
             raise ValueError("language, intent, and non-empty sentences are required")
 
-        sentence_id = f"{language}:{intent}:{uuid.uuid4().hex[:8]}"
+        sentence_id = f"{language}:{quote(intent, safe='')}:v2_{uuid.uuid4().hex[:8]}"
         await self.hass.async_add_executor_job(
             self._create_sync,
             language,
@@ -210,6 +211,8 @@ class SentenceStorage:
         parts = sentence_id.split(":")
         if len(parts) != 3 or not all(parts):
             return None
+        if parts[2].startswith("v2_"):
+            parts[1] = unquote(parts[1])
         try:
             SentenceStorage._validate_path_component(parts[0], "language")
             SentenceStorage._validate_path_component(parts[1], "intent")
@@ -373,7 +376,7 @@ class SentenceStorage:
             if idx < len(existing) and existing[idx]:
                 aligned.append(existing[idx])
             else:
-                aligned.append(f"{language}:{intent}:{uuid.uuid4().hex[:8]}")
+                aligned.append(f"{language}:{quote(intent, safe='')}:v2_{uuid.uuid4().hex[:8]}")
                 dirty = True
         if len(existing) != len(data):
             dirty = True

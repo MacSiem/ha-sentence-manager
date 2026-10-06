@@ -512,6 +512,8 @@ class HASentenceManager extends HTMLElement {
     this._toolId = this.tagName.toLowerCase().replace('ha-', '');
     this._lang = (navigator.language || '').startsWith('pl') ? 'pl' : 'en';
     this._hass = null;
+    this._dataEpoch = 0;
+    this._sentenceUserId = undefined;
     this.config = {};
     this.sentences = [];           // populated from integration WS API once `hass` is set
     this._sentencesLoaded = false; // becomes true after the first _reloadFromApi()
@@ -584,9 +586,12 @@ class HASentenceManager extends HTMLElement {
 
     if (hass?.language) this._lang = hass.language.startsWith('pl') ? 'pl' : 'en';    const prevHass = this._hass;
     const permissionsChanged = this._sentenceAdmin !== (hass?.user?.is_admin === true);
+    const identityChanged = this._sentenceUserId !== undefined && this._sentenceUserId !== hass?.user?.id;
+    if ((prevHass && permissionsChanged) || identityChanged || !hass) this._invalidateSession();
+    this._sentenceUserId = hass?.user?.id;
     this._sentenceAdmin = hass?.user?.is_admin === true;
     this._hass = hass;
-    if (!hass) return;
+    if (!hass) { this.shadowRoot?.replaceChildren(); return; }
     if (!this._sentencesLoaded) {
       // Load persisted sentences from the integration once HA is connected.
       this._sentencesLoaded = true;
@@ -599,11 +604,14 @@ class HASentenceManager extends HTMLElement {
       // Auto-detect intents on first hass load if on ha-sentences tab
       if (this.currentTab === 'ha-sentences' && !this._autoDetectRan && !this._haSentences) {
         this._autoDetectRan = true;
-        setTimeout(() => this._autoDetectIntents(), 500);
+        const epoch = this._dataEpoch;
+        this._detectTimer = setTimeout(() => {
+          if (epoch === this._dataEpoch && this._hass) this._autoDetectIntents();
+        }, 500);
       }
       return;
     }
-    if (permissionsChanged) this.render();
+    if (permissionsChanged || identityChanged) this.render();
     else if (previousLanguage !== this._lang) this._renderLocalePreservingDrafts();
     // Only re-render on hass update if entities actually changed
     // Sentence Manager has no entity dependencies — skip re-render on hass updates
@@ -832,15 +840,9 @@ class HASentenceManager extends HTMLElement {
 
   async _apiList(language = null) {
     if (!this._hass) return [];
-    try {
-      const msg = { type: 'ha_sentence_manager/list' };
-      if (language) msg.language = language;
-      return await this._hass.callWS(msg);
-    } catch (e) {
-      console.warn('[ha-sentence-manager] list failed', e);
-      this._apiError = e && e.message ? e.message : String(e);
-      return [];
-    }
+    const msg = { type: 'ha_sentence_manager/list' };
+    if (language) msg.language = language;
+    return await this._hass.callWS(msg);
   }
   async _apiCreate(payload) {
     this._requireSentenceAdmin();
@@ -870,7 +872,18 @@ class HASentenceManager extends HTMLElement {
     // contains multiple sentences (e.g. hand-edited YAML), the first one is
     // shown as `trigger` and the full list is preserved as `_allSentences`
     // so subsequent edits don't silently drop sibling phrases.
-    const items = await this._apiList(this._currentLanguage || null);
+    const epoch = this._dataEpoch;
+    let items;
+    try {
+      items = await this._apiList(this._currentLanguage || null);
+      if (epoch !== this._dataEpoch || !this._hass) return;
+      this._apiError = null;
+    } catch (e) {
+      if (epoch !== this._dataEpoch || !this._hass) return;
+      this._apiError = e.message || String(e);
+      this.render();
+      return;
+    }
     this.sentences = items.map(item => ({
       id: item.id,
       revision: item.revision,
@@ -913,11 +926,14 @@ class HASentenceManager extends HTMLElement {
   // reads, no Supervisor/REST endpoint guessing, no side-effects.
   async _loadHaSentences() {
     if (!this._hass || this._haSentencesLoading) return;
+    const epoch = this._dataEpoch;
     this._haSentencesLoading = true;
     this._haSentencesError = null;
     this.render();
     try {
       const items = await this._apiList(null);
+      if (epoch !== this._dataEpoch || !this._hass) return;
+      this._apiError = null;
       const grouped = { language: this.config.language || null, intents: {}, lists: {} };
       for (const item of (items || [])) {
         const key = item.intent || 'Unknown';
@@ -926,7 +942,9 @@ class HASentenceManager extends HTMLElement {
       }
       this._haSentences = Object.keys(grouped.intents).length ? grouped : null;
     } catch (e) {
+      if (epoch !== this._dataEpoch || !this._hass) return;
       this._haSentencesError = e && e.message ? e.message : String(e);
+      this._apiError = this._haSentencesError;
       this._haSentences = null;
     }
     this._haSentencesLoading = false;
@@ -1002,19 +1020,21 @@ class HASentenceManager extends HTMLElement {
   // Test sentence via HA Conversation API
   async _testSentenceHA(text) {
     if (!this._hass || !text.trim()) return;
+    const epoch = this._dataEpoch;
     this._testLoading = true;
     this._testResultHA = null;
     this.render();
     try {
-      const lang = this.config.language || 'pl';
+      const lang = this.config.language || this._hass.config?.language || 'en';
       const result = await this._hass.callWS({
         type: 'conversation/process',
         text: text.trim(),
         language: lang,
         agent_id: 'conversation.home_assistant'
       });
+      if (epoch !== this._dataEpoch || !this._hass) return;
       this._testResultHA = {
-        success: true,
+        success: result?.response?.response_type !== 'error',
         input: text,
         response: result?.response?.speech?.plain?.speech || 'No response',
         responseType: result?.response?.response_type || 'unknown',
@@ -1022,6 +1042,7 @@ class HASentenceManager extends HTMLElement {
         data: result?.response?.data || null
       };
     } catch(e) {
+      if (epoch !== this._dataEpoch || !this._hass) return;
       this._testResultHA = {
         success: false,
         input: text,
@@ -1083,6 +1104,7 @@ class HASentenceManager extends HTMLElement {
 
   async importFromYaml(yamlText) {
     if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
+    const epoch = this._dataEpoch;
     try {
       const lines = yamlText.split('\n');
       const imported = [];
@@ -1130,6 +1152,7 @@ class HASentenceManager extends HTMLElement {
       const language = (this._currentLanguage || this._hass?.config?.language || 'en');
       let created = 0;
       for (const item of imported) {
+        if (epoch !== this._dataEpoch) return;
         try {
           await this._apiCreate({
             language,
@@ -1140,13 +1163,17 @@ class HASentenceManager extends HTMLElement {
           });
           created++;
         } catch (e) {
+      if (epoch !== this._dataEpoch) return;
           console.warn('[ha-sentence-manager] import row failed', e, item);
         }
       }
+      if (epoch !== this._dataEpoch) return;
       await this._reloadFromApi();
+      if (epoch !== this._dataEpoch) return;
       await this._apiReload();
       this.showNotification(this._lang === 'pl' ? `Zaimportowano ${created} zdań` : `Imported ${created} sentences`, 'success');
     } catch (error) {
+      if (epoch !== this._dataEpoch) return;
       this.showNotification(this._lang === 'pl' ? 'Błąd importu YAML' : 'Error importing YAML', 'error');
     }
   }
@@ -1161,6 +1188,7 @@ class HASentenceManager extends HTMLElement {
 
   async saveSentence() {
     if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
+    const epoch = this._dataEpoch;
     const trigger = this.shadowRoot.querySelector('#trigger-input').value.trim();
     const intent = this.shadowRoot.querySelector('#intent-input').value.trim();
     const response = this.shadowRoot.querySelector('#response-input').value.trim();
@@ -1205,15 +1233,19 @@ class HASentenceManager extends HTMLElement {
         });
       }
     } catch (e) {
+      if (epoch !== this._dataEpoch) return;
       console.warn('[ha-sentence-manager] saveSentence failed', e);
       this.showNotification(`${this._lang === 'pl' ? 'Zapis nie powiódł się' : 'Save failed'}: ${e.message || e}`, 'error');
       return;
     }
 
+    if (epoch !== this._dataEpoch) return;
     this.editingId = null;
     this.editingIndex = null;
     this.clearForm();
+    if (epoch !== this._dataEpoch) return;
     await this._reloadFromApi();
+    if (epoch !== this._dataEpoch) return;
     await this._apiReload();
     this.showNotification(this._lang === 'pl' ? 'Zdanie zapisane' : 'Sentence saved', 'success');
   }
@@ -1270,6 +1302,7 @@ class HASentenceManager extends HTMLElement {
 
   async deleteSentence(indexOrId) {
     if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
+    const epoch = this._dataEpoch;
     let sentence;
     if (typeof indexOrId === 'number') sentence = this.sentences[indexOrId];
     else sentence = this.sentences.find(s => s.id === indexOrId);
@@ -1282,11 +1315,14 @@ class HASentenceManager extends HTMLElement {
         throw new Error(this._lang === 'pl' ? 'serwer nie znalazł zdania do usunięcia' : 'server could not find the sentence to delete');
       }
     } catch (e) {
+      if (epoch !== this._dataEpoch) return;
       console.warn('[ha-sentence-manager] deleteSentence failed', e);
       this.showNotification(`${this._lang === 'pl' ? 'Usuwanie nie powiodło się' : 'Delete failed'}: ${e.message || e}`, 'error');
       return;
     }
+    if (epoch !== this._dataEpoch) return;
     await this._reloadFromApi();
+    if (epoch !== this._dataEpoch) return;
     await this._apiReload();
     this.showNotification(this._lang === 'pl' ? 'Zdanie usunięte' : 'Sentence deleted', 'success');
   }
@@ -1600,6 +1636,7 @@ class HASentenceManager extends HTMLElement {
   // Import HA's existing custom-sentence definitions into the integration store
   async _importHaSentencesToEditor() {
     if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
+    const epoch = this._dataEpoch;
     if (!this._haSentences || !this._haSentences.intents) return;
     const language = (this._currentLanguage || this._hass?.config?.language || 'en');
     const toCreate = [];
@@ -1621,6 +1658,7 @@ class HASentenceManager extends HTMLElement {
     }
     let created = 0;
     for (const item of toCreate) {
+      if (epoch !== this._dataEpoch) return;
       try {
         await this._apiCreate({
           language,
@@ -1631,10 +1669,13 @@ class HASentenceManager extends HTMLElement {
         });
         created++;
       } catch (e) {
+      if (epoch !== this._dataEpoch) return;
         console.warn('[ha-sentence-manager] HA-import row failed', e, item);
       }
     }
+    if (epoch !== this._dataEpoch) return;
     await this._reloadFromApi();
+    if (epoch !== this._dataEpoch) return;
     await this._apiReload();
     this.showNotification(this._lang === 'pl' ? `Zaimportowano ${created} zdań z HA` : `Imported ${created} sentences from HA`, 'success');
   }
@@ -3340,7 +3381,28 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   disconnectedCallback() {
-    // Cleanup any active event listeners or timers
+    this._invalidateSession();
+    this._hass = null;
+    this._sentenceUserId = undefined;
+    this._firstHassRender = false;
+    this.shadowRoot?.replaceChildren();
+  }
+
+  _invalidateSession() {
+    this._dataEpoch++;
+    clearTimeout(this._detectTimer);
+    this.editingId = null;
+    this.editingIndex = null;
+    this.sentences = [];
+    this._sentencesLoaded = false;
+    this._haSentences = null;
+    this._haSentencesLoading = false;
+    this._haSentencesError = null;
+    this._apiError = null;
+    this._autoDetectRan = false;
+    this._testResultHA = null;
+    this._testLoading = false;
+    this._generatedActionYaml = null;
   }
 
   // --- Pagination helper ---
