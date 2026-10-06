@@ -587,7 +587,9 @@ class HASentenceManager extends HTMLElement {
     if (hass?.language) this._lang = hass.language.startsWith('pl') ? 'pl' : 'en';    const prevHass = this._hass;
     const permissionsChanged = this._sentenceAdmin !== (hass?.user?.is_admin === true);
     const identityChanged = this._sentenceUserId !== undefined && this._sentenceUserId !== hass?.user?.id;
-    if ((prevHass && permissionsChanged) || identityChanged || !hass) this._invalidateSession();
+    if ((prevHass && permissionsChanged) || identityChanged || !hass) {
+      this._invalidateSession(!!hass && !identityChanged && !!prevHass);
+    }
     this._sentenceUserId = hass?.user?.id;
     this._sentenceAdmin = hass?.user?.is_admin === true;
     this._hass = hass;
@@ -3388,14 +3390,18 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     this.shadowRoot?.replaceChildren();
   }
 
-  _invalidateSession() {
+  _invalidateSession(keepPublicReads = false) {
     this._dataEpoch++;
     clearTimeout(this._detectTimer);
     this.editingId = null;
     this.editingIndex = null;
-    this.sentences = [];
-    this._sentencesLoaded = false;
-    this._haSentences = null;
+    // A role change on the same account keeps its readable sentence list;
+    // an account change or disconnect drops every response and draft.
+    if (!keepPublicReads) {
+      this.sentences = [];
+      this._sentencesLoaded = false;
+      this._haSentences = null;
+    }
     this._haSentencesLoading = false;
     this._haSentencesError = null;
     this._apiError = null;
