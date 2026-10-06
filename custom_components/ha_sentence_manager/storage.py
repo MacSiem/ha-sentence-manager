@@ -24,6 +24,7 @@ than raising.
 from __future__ import annotations
 
 import glob
+from collections import Counter
 from functools import wraps
 import hashlib
 import logging
@@ -287,12 +288,67 @@ class SentenceStorage:
             return []
         return [str(x) for x in ids]
 
-    def _dump_meta(self, meta_path: str, ids: list[str]) -> None:
-        """Persist the ``ids`` list into the sidecar (or remove if empty)."""
+    def _dump_meta(self, meta_path: str, ids: list[str] | dict[str, Any]) -> None:
+        """Persist IDs or a recoverable before/after metadata snapshot."""
+        if isinstance(ids, dict):
+            self._dump(meta_path, ids)
+            return
         if not ids:
             self._remove_if_exists(meta_path)
             return
         self._dump(meta_path, {"ids": ids})
+
+    @staticmethod
+    def _fingerprints(data: list[Any]) -> list[str]:
+        """Identify unchanged entries without copying sentence text to metadata."""
+        return [hashlib.sha256(yaml.safe_dump(entry, sort_keys=True, allow_unicode=True).encode()).hexdigest()
+                for entry in data]
+
+    def _ids_for(self, language: str, intent: str, data: list[Any], meta_path: str) -> tuple[list[str], bool]:
+        """Recover the matching snapshot; retain IDs when unchanged rows move."""
+        meta = self._safe_load(meta_path) or {}
+        fingerprints = self._fingerprints(data)
+        candidates = [meta]
+        if isinstance(meta.get("previous"), dict):
+            candidates.append(meta["previous"])
+        current_counts = Counter(fingerprints)
+        def score(snapshot):
+            saved = snapshot.get("fingerprints")
+            return sum((current_counts & Counter(saved)).values()) if isinstance(saved, list) else -1
+        snapshot = max(candidates, key=score)
+        existing = snapshot.get("ids")
+        existing = existing if isinstance(existing, list) else []
+        saved = snapshot.get("fingerprints")
+        if not isinstance(saved, list):
+            aligned, _ = self._aligned_ids(language, intent, data, existing)
+        else:
+            # Match unchanged rows first, then retain positional identity for
+            # a hand-edited row only if that ID was not matched elsewhere.
+            unused = list(range(min(len(saved), len(existing))))
+            aligned = [""] * len(data)
+            for index, fingerprint in enumerate(fingerprints):
+                match = next((i for i in unused if saved[i] == fingerprint), None)
+                if match is not None:
+                    aligned[index] = existing[match]
+                    unused.remove(match)
+            for index in range(len(data)):
+                if not aligned[index] and index in unused:
+                    aligned[index] = existing[index]
+                    unused.remove(index)
+            aligned, _ = self._aligned_ids(language, intent, data, aligned)
+        dirty = meta.get("ids") != aligned or meta.get("fingerprints") != fingerprints or "previous" in meta
+        return aligned, dirty
+
+    def _prepare_metadata(self, meta_path: str, ids: list[str], data: list[Any],
+                          previous_ids: list[str], previous_fingerprints: list[str]) -> None:
+        """Write both identities before YAML's atomic replace is the commit point.
+
+        A process interruption before replace recovers the previous IDs; after
+        replace it recovers the new IDs. No second metadata write is required
+        for an acknowledged operation. Reads compact the matching snapshot.
+        """
+        self._dump_meta(meta_path, {"ids": ids, "fingerprints": self._fingerprints(data),
+                                  "previous": {"ids": previous_ids, "fingerprints": previous_fingerprints}})
 
     @staticmethod
     def _remove_if_exists(path: str) -> None:
@@ -368,8 +424,14 @@ class SentenceStorage:
             )
         out: list[dict[str, Any]] = []
         for lang in languages:
-            pattern = os.path.join(self._lang_dir(lang), f"{FILE_PREFIX}*.yaml")
+            try:
+                pattern = os.path.join(self._lang_dir(lang), f"{FILE_PREFIX}*.yaml")
+            except ValueError:
+                continue
             for path in sorted(glob.glob(pattern)):
+                if os.path.commonpath((root, os.path.realpath(path))) != root:
+                    _LOGGER.warning("Skipping sentence path outside custom_sentences")
+                    continue
                 loaded, revision = self._load_with_revision(path)
                 if not loaded:
                     continue
@@ -378,16 +440,16 @@ class SentenceStorage:
                     _LOGGER.warning("Malformed intents block in %s", path)
                     continue
                 for intent, block in intents.items():
+                    if not isinstance(block, dict):
+                        continue
                     data = (block or {}).get("data") or []
                     if not isinstance(data, list):
                         continue
                     meta_path = self._meta_path_for(lang, str(intent))
-                    aligned, dirty = self._aligned_ids(
-                        lang, str(intent), data, self._load_meta(meta_path)
-                    )
+                    aligned, dirty = self._ids_for(lang, str(intent), data, meta_path)
                     if dirty:
                         # Persist newly-generated ids so subsequent reads are stable.
-                        self._dump_meta(meta_path, aligned)
+                        self._dump_meta(meta_path, {"ids": aligned, "fingerprints": self._fingerprints(data)})
                     for idx, entry in enumerate(data):
                         normalized = self._normalize(
                             aligned[idx], lang, str(intent), entry
@@ -410,11 +472,9 @@ class SentenceStorage:
         if not isinstance(data, list):
             return None
         meta_path = self._meta_path_for(language, intent)
-        aligned, dirty = self._aligned_ids(
-            language, intent, data, self._load_meta(meta_path)
-        )
+        aligned, dirty = self._ids_for(language, intent, data, meta_path)
         if dirty:
-            self._dump_meta(meta_path, aligned)
+            self._dump_meta(meta_path, {"ids": aligned, "fingerprints": self._fingerprints(data)})
         for idx, entry in enumerate(data):
             if aligned[idx] != sentence_id:
                 continue
@@ -443,6 +503,9 @@ class SentenceStorage:
         intents = loaded.setdefault("intents", {})
         block = intents.setdefault(intent, {"data": []})
         data = block.setdefault("data", [])
+        meta_path = self._meta_path_for(language, intent)
+        ids, _ = self._ids_for(language, intent, data, meta_path)
+        previous_fingerprints = self._fingerprints(data)
         entry: dict[str, Any] = {
             "sentences": [str(s) for s in sentences],
             "slots": {str(k): str(v) for k, v in slots.items()},
@@ -450,16 +513,8 @@ class SentenceStorage:
         if response:
             entry["response"] = response
         data.append(entry)
+        self._prepare_metadata(meta_path, ids + [sentence_id], data, ids, previous_fingerprints)
         self._dump(path, loaded, expected_revision=revision)
-
-        # Keep the sidecar parallel to the main file.
-        meta_path = self._meta_path_for(language, intent)
-        ids = self._load_meta(meta_path)
-        # Pad to len(data) - 1 (everything before the new entry).
-        while len(ids) < len(data) - 1:
-            ids.append(f"{language}:{intent}:{uuid.uuid4().hex[:8]}")
-        ids.append(sentence_id)
-        self._dump_meta(meta_path, ids)
 
     @_serialized_io
     def _update_sync(
@@ -481,9 +536,8 @@ class SentenceStorage:
         if not isinstance(data, list):
             return False
         meta_path = self._meta_path_for(language, intent)
-        aligned, dirty = self._aligned_ids(
-            language, intent, data, self._load_meta(meta_path)
-        )
+        aligned, dirty = self._ids_for(language, intent, data, meta_path)
+        previous_fingerprints = self._fingerprints(data)
         for idx, entry in enumerate(data):
             if not isinstance(entry, dict) or aligned[idx] != sentence_id:
                 continue
@@ -508,9 +562,8 @@ class SentenceStorage:
                     entry["response"] = str(response)
                 else:
                     entry.pop("response", None)
+            self._prepare_metadata(meta_path, aligned, data, aligned, previous_fingerprints)
             self._dump(path, loaded, expected_revision=revision)
-            if dirty:
-                self._dump_meta(meta_path, aligned)
             return True
         if dirty:
             self._dump_meta(meta_path, aligned)
@@ -532,9 +585,7 @@ class SentenceStorage:
         if not isinstance(data, list):
             return False
         meta_path = self._meta_path_for(language, intent)
-        aligned, _ = self._aligned_ids(
-            language, intent, data, self._load_meta(meta_path)
-        )
+        aligned, _ = self._ids_for(language, intent, data, meta_path)
 
         new_data: list[Any] = []
         new_ids: list[str] = []
@@ -548,12 +599,13 @@ class SentenceStorage:
         if not removed:
             return False
 
+        self._prepare_metadata(meta_path, new_ids, new_data, aligned, self._fingerprints(data))
+
         if new_data:
             block["data"] = new_data
             intents[intent] = block
             loaded["intents"] = intents
             self._dump(path, loaded, expected_revision=revision)
-            self._dump_meta(meta_path, new_ids)
             return True
 
         # Last entry for this intent removed.
