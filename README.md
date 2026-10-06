@@ -12,8 +12,8 @@ Manage Home Assistant Assist custom sentences (intents, slots, responses) from a
 
 1. **Server-side storage.** Every sentence is one entry in a YAML file at `<config>/custom_sentences/<lang>/ha_sentence_manager_<intent>.yaml` — HA's own location for Assist custom sentences, so it's covered by standard HA backups and shared across every browser/device.
 2. **The card is bundled and auto-registered.** The integration serves `ha-sentence-manager.js`, registers one Lovelace resource in storage mode and an administrator-only sidebar panel. YAML mode uses Home Assistant's frontend fallback.
-3. **Stable ids without polluting the schema.** Each entry gets an opaque id (`<lang>:<intent>:<hex8>`) tracked in a sidecar `.ha_sentence_manager_<intent>.meta.yaml` file. The main YAML stays a plain HA `custom_sentences` file — no extra keys — so hand-editing it is safe; ids are regenerated and re-synced on the next read if the sidecar is missing or out of step.
-4. **Auto-reload.** Every create/update/delete calls `conversation.reload` so edits take effect immediately, without a HA restart.
+3. **Stable ids without polluting the schema.** Each entry gets an opaque id tracked in a sidecar `.ha_sentence_manager_<intent>.meta.yaml` file. Keep the YAML and sidecar together in backups. Fingerprints retain IDs for unchanged rows after manual reordering; missing sidecars receive new IDs. Before/after metadata snapshots recover the matching IDs if a write stops before or after the main YAML replacement. The main YAML contains only Home Assistant sentence definitions. Treat IDs as opaque; new IDs also support intent names containing colons, while existing IDs remain valid.
+4. **Auto-reload.** After a successful create/update/delete, the card requests `conversation.reload` so edits take effect immediately, without a HA restart.
 5. **Read is open, write is admin-only.** The `ha_sentence_manager/list` WebSocket command has no admin requirement, so the card renders and is browsable for every logged-in user. `create` / `update` / `delete` / `reload` are decorated with `@websocket_api.require_admin` because they change HA's conversation configuration on disk.
 6. **Concurrent edits are checked.** The card sends the YAML file revision with update/delete requests. If the file changed after you opened the card, the server rejects the stale request so you can reload and review the newer text. Writes use a temporary file and atomic replace, keeping the previous YAML intact if serialization fails.
 
@@ -21,9 +21,9 @@ Manage Home Assistant Assist custom sentences (intents, slots, responses) from a
 
 | Automatic | Manual |
 |---|---|
-| Card JS registration (no Lovelace resource entry) | Adding the integration once (Settings → Devices & services) |
+| Card JS registration (one owned resource in storage mode) | Adding the integration once (Settings → Devices & services) |
 | Browsing/searching sentences — open to every logged-in user | Creating, editing, and deleting sentences — admin accounts only |
-| `conversation.reload` after every create/update/delete | Calling `ha_sentence_manager.reload` manually (e.g. after hand-editing a YAML file) |
+| Card requests `conversation.reload` after a successful create/update/delete | Calling `ha_sentence_manager.reload` manually (e.g. after hand-editing a YAML file) |
 | Stable per-entry ids via sidecar `.meta.yaml` files | Testing a phrase against `conversation/process` in the Test tab |
 
 ## Screenshots
@@ -43,7 +43,13 @@ follows your Home Assistant theme.*
 3. **Settings → Devices & services → Add Integration → HA Sentence Manager.**
 4. Administrators can open **Sentence Manager** in the sidebar. The Lovelace card is registered automatically — add `type: custom:ha-sentence-manager` to a dashboard if preferred.
 
-If you previously installed v4 as a Lovelace plugin, remove the old `/local/community/ha-sentence-manager/ha-sentence-manager.js` resource entry under *Dashboards → Resources* — it's superseded by the integration-served `/ha_sentence_manager/ha-sentence-manager.js`.
+If you previously installed v4 as a Lovelace plugin, the integration preserves that existing resource to avoid loading the element twice. To migrate to the bundled card, remove the old `/local/community/ha-sentence-manager/ha-sentence-manager.js` resource entry under *Dashboards → Resources* — it's superseded by the integration-served `/ha_sentence_manager/ha-sentence-manager.js`.
+
+## Upgrade from 5.0.14
+
+Home Assistant 2025.2 or later is required. Back up `custom_sentences/`, including dot-prefixed metadata files, then update the integration through HACS and restart Home Assistant to load the new Python modules. Existing sentence definitions and legacy IDs are retained. Refresh the browser after restart; the owned resource uses a versioned URL. Existing external card resources are preserved and must be migrated explicitly if they still point to an older card.
+
+The server serializes its own executor operations, including writes pending across config-entry reload. Revision checks detect files changed since the last read. They do not provide an atomic compare-and-swap guarantee against an independent process editing files during the check/write interval; avoid simultaneous external file writes. If a stale edit is rejected, reload and review the newer text before saving again.
 
 ## Quick start
 
@@ -72,7 +78,7 @@ This integration exposes no entities. It registers one service:
 
 | Service | Description |
 |---|---|
-| `ha_sentence_manager.reload` | Asks the `conversation` integration to reload custom sentence YAML files. Called automatically after every create/update/delete; exposed so it can also be triggered manually, e.g. after editing a YAML file by hand. |
+| `ha_sentence_manager.reload` | Asks the `conversation` integration to reload custom sentence YAML files. The card requests it after successful mutations. Direct WebSocket scripts must explicitly call reload when finished, as must users editing YAML by hand. |
 
 ## WebSocket API
 
@@ -80,10 +86,10 @@ Consumed by the bundled card; useful if you're scripting against it directly.
 
 | Command | Access | Description |
 |---|---|---|
-| `ha_sentence_manager/list` | Any logged-in user | Returns every persisted sentence, each `{id, language, intent, sentences, slots, response}`. Optional `language` filter. |
+| `ha_sentence_manager/list` | Any logged-in user | Returns every persisted sentence, each `{id, language, intent, sentences, slots, response}`. Includes a `revision` digest; optional `language` filter. |
 | `ha_sentence_manager/create` | Admin | Creates an entry from `{language, intent, sentences, slots, response}`, returns `{id}`. |
-| `ha_sentence_manager/update` | Admin | Patches `sentences` / `slots` / `response` on `sentence_id` via `patch`, returns `{ok}`. |
-| `ha_sentence_manager/delete` | Admin | Removes `sentence_id` (and its file, if it was the last entry), returns `{ok}`. |
+| `ha_sentence_manager/update` | Admin | Patches `sentences` / `slots` / `response` on `sentence_id` via `patch`, with the last-read `revision`; returns `{ok}`. |
+| `ha_sentence_manager/delete` | Admin | Removes `sentence_id` using the last-read `revision` (and its file, if it was the last entry); returns `{ok}`. |
 | `ha_sentence_manager/reload` | Admin | Triggers `conversation.reload`, returns `{ok}`. |
 
 A persisted entry becomes a plain HA `custom_sentences` YAML file — for example, `ha_sentence_manager/create` with `{language: "en", intent: "HassLightSet", sentences: ["Turn on the {area} lights"], slots: {area: "string"}, response: "{area} lights are now on"}` is written to `custom_sentences/en/ha_sentence_manager_HassLightSet.yaml` as:
@@ -113,7 +119,7 @@ with a sidecar `.ha_sentence_manager_HassLightSet.meta.yaml` holding the matchin
 ## FAQ
 
 **Can non-admin users see this card?**
-Yes. `ha_sentence_manager/list` has no admin requirement, so any logged-in Home Assistant user can browse and search sentences. The `create`, `update`, `delete`, and `reload` WebSocket commands are admin-only — a non-admin who tries to save an edit gets a permission error from Home Assistant. The card itself does not hide the Editor/Delete controls for non-admins; the restriction is enforced by Home Assistant on the request.
+Yes. `ha_sentence_manager/list` has no admin requirement, so any logged-in Home Assistant user can browse and search sentences. The `create`, `update`, `delete`, and `reload` WebSocket commands are admin-only — a non-admin who tries to save an edit gets a permission error from Home Assistant. The card hides privileged editor, import and delete controls for non-admins. Home Assistant independently enforces permissions on every mutation request. A role or account change clears the old draft and invalidates pending reads; ordinary language changes preserve drafts, slots, focus and selection.
 
 **Where are my sentences stored?**
 As plain YAML under `<config>/custom_sentences/<language>/`, one file per `(language, intent)` pair — the same location Home Assistant's own Assist reads. They're included in any standard HA config backup.

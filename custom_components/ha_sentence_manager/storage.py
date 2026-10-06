@@ -8,12 +8,10 @@ To keep the main file 100% schema-compatible with HA's intent_script
 loader, no extra keys are ever written into the data entries themselves.
 Stable per-entry IDs live in a sibling sidecar file with a dot prefix
 (``.ha_sentence_manager_<intent>.meta.yaml``) which HA ignores. The
-sidecar stores an ``ids`` list parallel to the main file's
-``intents.<intent>.data`` list (same length, same order).
-
-If the sidecar is missing or out of sync (e.g. someone hand-edited the
-main file or copied it from elsewhere), fresh IDs are generated on read
-and persisted back so subsequent reads stay stable.
+sidecar stores IDs, row fingerprints and a pending before/after snapshot.
+The main YAML replacement is the commit point; the next read recovers IDs
+from the snapshot matching the current YAML. Missing metadata receives
+fresh IDs; unchanged manually reordered rows retain their IDs.
 
 All filesystem operations go through ``hass.async_add_executor_job`` so
 the event loop is never blocked. Reads are defensive: missing
