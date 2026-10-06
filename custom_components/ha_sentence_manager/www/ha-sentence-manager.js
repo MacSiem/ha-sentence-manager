@@ -513,6 +513,7 @@ class HASentenceManager extends HTMLElement {
     this._lang = (navigator.language || '').startsWith('pl') ? 'pl' : 'en';
     this._hass = null;
     this._dataEpoch = 0;
+    this._sentenceReadsPending = 0;
     this._sentenceUserId = undefined;
     this.config = {};
     this.sentences = [];           // populated from integration WS API once `hass` is set
@@ -875,13 +876,16 @@ class HASentenceManager extends HTMLElement {
     // shown as `trigger` and the full list is preserved as `_allSentences`
     // so subsequent edits don't silently drop sibling phrases.
     const epoch = this._dataEpoch;
+    this._sentenceReadsPending++;
     let items;
     try {
       items = await this._apiList(this._currentLanguage || null);
       if (epoch !== this._dataEpoch || !this._hass) return;
+      this._sentenceReadsPending--;
       this._apiError = null;
     } catch (e) {
       if (epoch !== this._dataEpoch || !this._hass) return;
+      this._sentenceReadsPending--;
       this._apiError = e.message || String(e);
       this.render();
       return;
@@ -936,7 +940,7 @@ class HASentenceManager extends HTMLElement {
       const items = await this._apiList(null);
       if (epoch !== this._dataEpoch || !this._hass) return;
       this._apiError = null;
-      const grouped = { language: this.config.language || null, intents: {}, lists: {} };
+      const grouped = { language: this.config.language || null, intents: Object.create(null), lists: Object.create(null) };
       for (const item of (items || [])) {
         const key = item.intent || 'Unknown';
         if (!grouped.intents[key]) grouped.intents[key] = [];
@@ -1173,6 +1177,7 @@ class HASentenceManager extends HTMLElement {
       await this._reloadFromApi();
       if (epoch !== this._dataEpoch) return;
       await this._apiReload();
+    if (epoch !== this._dataEpoch) return;
       this.showNotification(this._lang === 'pl' ? `Zaimportowano ${created} zdań` : `Imported ${created} sentences`, 'success');
     } catch (error) {
       if (epoch !== this._dataEpoch) return;
@@ -1249,6 +1254,7 @@ class HASentenceManager extends HTMLElement {
     await this._reloadFromApi();
     if (epoch !== this._dataEpoch) return;
     await this._apiReload();
+    if (epoch !== this._dataEpoch) return;
     this.showNotification(this._lang === 'pl' ? 'Zdanie zapisane' : 'Sentence saved', 'success');
   }
 
@@ -1326,6 +1332,7 @@ class HASentenceManager extends HTMLElement {
     await this._reloadFromApi();
     if (epoch !== this._dataEpoch) return;
     await this._apiReload();
+    if (epoch !== this._dataEpoch) return;
     this.showNotification(this._lang === 'pl' ? 'Zdanie usunięte' : 'Sentence deleted', 'success');
   }
 
@@ -1679,6 +1686,7 @@ class HASentenceManager extends HTMLElement {
     await this._reloadFromApi();
     if (epoch !== this._dataEpoch) return;
     await this._apiReload();
+    if (epoch !== this._dataEpoch) return;
     this.showNotification(this._lang === 'pl' ? `Zaimportowano ${created} zdań z HA` : `Imported ${created} sentences from HA`, 'success');
   }
 
@@ -1903,7 +1911,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   groupBySentenceIntent() {
-    const groups = {};
+    const groups = Object.create(null);
     this.sentences.forEach(sentence => {
       if (!groups[sentence.intent]) {
         groups[sentence.intent] = [];
@@ -3392,6 +3400,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 
   _invalidateSession(keepPublicReads = false) {
     this._dataEpoch++;
+    if (this._sentenceReadsPending) this._sentencesLoaded = false;
+    this._sentenceReadsPending = 0;
     clearTimeout(this._detectTimer);
     this.editingId = null;
     this.editingIndex = null;

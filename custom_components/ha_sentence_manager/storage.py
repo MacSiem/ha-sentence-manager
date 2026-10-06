@@ -113,7 +113,7 @@ class SentenceStorage:
         if not language or not intent or not sentences:
             raise ValueError("language, intent, and non-empty sentences are required")
 
-        sentence_id = f"{language}:{quote(intent, safe='')}:v2_{uuid.uuid4().hex[:8]}"
+        sentence_id = f"{quote(language, safe='')}:{quote(intent, safe='')}:v2_{uuid.uuid4().hex[:8]}"
         await self.hass.async_add_executor_job(
             self._create_sync,
             language,
@@ -210,6 +210,7 @@ class SentenceStorage:
         if len(parts) != 3 or not all(parts):
             return None
         if parts[2].startswith("v2_"):
+            parts[0] = unquote(parts[0])
             parts[1] = unquote(parts[1])
         try:
             SentenceStorage._validate_path_component(parts[0], "language")
@@ -374,7 +375,7 @@ class SentenceStorage:
             if idx < len(existing) and existing[idx]:
                 aligned.append(existing[idx])
             else:
-                aligned.append(f"{language}:{quote(intent, safe='')}:v2_{uuid.uuid4().hex[:8]}")
+                aligned.append(f"{quote(language, safe='')}:{quote(intent, safe='')}:v2_{uuid.uuid4().hex[:8]}")
                 dirty = True
         if len(existing) != len(data):
             dirty = True
