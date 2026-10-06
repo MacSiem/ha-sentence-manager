@@ -643,6 +643,7 @@ class HASentenceManager extends HTMLElement {
       if (field.checked !== undefined) current.checked = field.checked;
       current.scrollTop = field.scrollTop;
     }
+    this._filterSentenceList();
     const current = active?.id ? this.shadowRoot.getElementById(active.id)
       : active?.isConnected ? active : null;
     if (current) {
@@ -1430,6 +1431,10 @@ class HASentenceManager extends HTMLElement {
         <button class="tab-btn ${this.currentTab === 'actions' ? 'active' : ''}" aria-pressed="${this.currentTab === 'actions'}" data-tab="actions">⚙️ ${this._lang === 'pl' ? 'Własne akcje' : 'Custom Actions'}</button>
       </div>
 
+      ${this._apiError ? `<div class="sentence-read-error" role="alert">
+        <p>${this._lang === 'pl' ? 'Nie udało się wczytać zdań' : 'Could not load sentences'}: ${_esc(this._apiError)}</p>
+        <button class="btn" id="retry-sentences-btn">${this._lang === 'pl' ? 'Spróbuj ponownie' : 'Retry'}</button>
+      </div>` : ''}
       <div class="tab-content active">
         ${activeTabContent}
       </div>
@@ -1760,6 +1765,28 @@ class HASentenceManager extends HTMLElement {
     `;
   }
 
+  _filterSentenceList() {
+    const query = (this.shadowRoot.querySelector('#search-input')?.value || '').trim().toLocaleLowerCase();
+    for (const group of this.shadowRoot.querySelectorAll('.sentence-group')) {
+      const intent = group.querySelector('.group-header')?.textContent || '';
+      let visible = false;
+      for (const row of group.querySelectorAll('.sentence-item')) {
+        const content = row.querySelector('.sentence-content')?.textContent || '';
+        const matches = !query || (intent + ' ' + content).toLocaleLowerCase().includes(query);
+        row.style.display = matches ? '' : 'none';
+        visible ||= matches;
+      }
+      group.style.display = visible ? '' : 'none';
+    }
+  }
+
+  async _retrySentenceReads() {
+    const epoch = this._dataEpoch;
+    await this._reloadFromApi();
+    if (epoch !== this._dataEpoch || !this._hass || this._apiError) return;
+    await this._loadHaSentences();
+  }
+
   renderList() {
     const grouped = this.groupBySentenceIntent();
     return `
@@ -1768,7 +1795,7 @@ class HASentenceManager extends HTMLElement {
           <h2>${this._lang === 'pl' ? 'Własne zdania' : 'Custom Sentences'}</h2>
           <input type="text" id="search-input" placeholder="${this._lang === 'pl' ? 'Szukaj zdań...' : 'Search sentences...'}" class="search-input">
           <div class="sentences-list">
-            ${this.sentences.length === 0 ? (this._lang === 'pl' ? '<p class="empty-state">Brak zdań. Utwórz pierwsze w edytorze.</p>' : '<p class="empty-state">No sentences yet. Create one in the editor!</p>') : ''}
+            ${this.sentences.length === 0 && !this._apiError ? (this._lang === 'pl' ? '<p class="empty-state">Brak zdań. Utwórz pierwsze w edytorze.</p>' : '<p class="empty-state">No sentences yet. Create one in the editor!</p>') : ''}
             ${grouped.map(group => `
               <div class="sentence-group">
                 <h3 class="group-header">${_esc(group.intent)}</h3>
@@ -1840,7 +1867,7 @@ class HASentenceManager extends HTMLElement {
             <div class="tryit-result-header">
               <span class="badge badge-error">❌ ${this._lang === 'pl' ? 'Błąd' : 'Error'}</span>
             </div>
-            <div class="tryit-speech tryit-speech-error">${this._escapeHtml(haResult.error || 'Unknown error')}</div>
+            <div class="tryit-speech tryit-speech-error">${this._escapeHtml(haResult.error || haResult.response || 'Unknown error')}</div>
             <div class="tryit-input-echo"><span class="tryit-input-label">${this._lang === 'pl' ? 'Zapytanie:' : 'Input:'}</span> <code>${this._escapeHtml(haResult.input)}</code></div>
           </div>`;
       }
@@ -1951,8 +1978,16 @@ class HASentenceManager extends HTMLElement {
         });
       }
     }
+    const retry = this.shadowRoot.querySelector('#retry-sentences-btn');
+    if (retry && !retry.dataset.sentenceRetryBound) {
+      retry.dataset.sentenceRetryBound = '1';
+      retry.addEventListener('click', () => this._retrySentenceReads());
+    }
+    this.shadowRoot.querySelector('#search-input')?.addEventListener('input', () => this._filterSentenceList());
     // Tab switching
     this.shadowRoot.querySelectorAll('.tab-btn').forEach(btn => {
+      if (btn.dataset.sentenceTabBound) return;
+      btn.dataset.sentenceTabBound = '1';
       btn.addEventListener('click', e => {
         this.currentTab = e.target.dataset.tab;
         history.replaceState(null, '', location.pathname + '#' + this._toolId + '/' + this.currentTab);
@@ -2943,6 +2978,7 @@ canvas {
   --bento-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: block;
   color-scheme: light dark;
+  container-type: inline-size;
 }
 * { box-sizing: border-box; }
 
@@ -3224,6 +3260,18 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   .editor-section .btn { flex-shrink: 0; }
   .editor-section h2 { font-size: 16px !important; }
   .form-group input, .form-group select, .form-group textarea { font-size: 16px !important; }
+}
+
+/* Layout follows the Lovelace card width, including narrow Sections columns. */
+@container (max-width: 560px) {
+  .slot-item { grid-template-columns: minmax(0, 1fr); }
+  .form-actions { flex-wrap: wrap; }
+  .form-actions .btn { width: 100%; margin-right: 0; }
+}
+.sentence-read-error {
+  margin-bottom: 16px; padding: 12px;
+  border: 1px solid var(--bento-error); border-radius: var(--bento-radius-sm);
+  color: var(--bento-error); overflow-wrap: anywhere;
 }
 
 /* Tips banner */

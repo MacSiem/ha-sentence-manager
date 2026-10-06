@@ -22,12 +22,14 @@ test('failed first list renders an explicit error and read-only retry restores r
   await card._reloadFromApi();
   assert.match(card.shadowRoot.querySelector('[role="alert"]')?.textContent || '',/QA read unavailable/);
   assert.doesNotMatch(card.shadowRoot.textContent,/No sentences yet/);
+  card.shadowRoot.querySelector('[data-tab="editor"]').click();
+  card.shadowRoot.querySelector('[data-tab="list"]').click();
   const retry=card.shadowRoot.querySelector('#retry-sentences-btn');assert.ok(retry);
   let requests=[];hass.callWS=async(msg)=>{requests.push(msg.type);return [{id:'en:QA:id',language:'en',intent:'QA',sentences:['QA restored phrase'],slots:{},response:'Synthetic restored',revision:'revision'}];};
   retry.click();await new Promise(r=>setImmediate(r));
   assert.equal(card._apiError,null);assert.match(card.shadowRoot.textContent,/QA restored phrase/);
   assert.equal(card.shadowRoot.querySelector('[role="alert"]'),null);
-  assert.ok(requests.length>0);assert.ok(requests.every(x=>x==='ha_sentence_manager/list'));
+  assert.equal(requests.length,2);assert.ok(requests.every(x=>x==='ha_sentence_manager/list'));
  } finally {dom.window.close();}
 });
 test('search filters phrase, intent and response without changing persisted rows and keeps filtering on locale change',()=>{
