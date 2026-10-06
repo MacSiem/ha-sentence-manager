@@ -1,5 +1,6 @@
 """Recover sentence/ID pairs after interrupted operations on real files."""
 import os
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -76,3 +77,18 @@ class RecoveryTests(unittest.TestCase):
         outside.write_text("language: en\nintents:\n  Private:\n    data:\n      - sentences: [private text]\n")
         os.symlink(outside, Path(self.path).parent / "ha_sentence_manager_Private.yaml")
         self.assertEqual([r["id"] for r in self.rows()], [self.a, self.b])
+
+    def test_colon_intent_can_be_created_read_edited_and_deleted_by_its_id(self):
+        async def executor(method, *args):
+            return method(*args)
+        self.hass.async_add_executor_job = executor
+        async def roundtrip():
+            sid = await self.storage.create({"language":"en", "intent":"QA:literal", "sentences":["literal phrase"]})
+            row = await self.storage.get_one(sid)
+            self.assertIsNotNone(row)
+            self.assertTrue(await self.storage.update(sid, {"response":"literal: answer"}, row["revision"]))
+            row = await self.storage.get_one(sid)
+            self.assertEqual(row["response"], "literal: answer")
+            self.assertTrue(await self.storage.delete(sid, row["revision"]))
+            self.assertIsNone(await self.storage.get_one(sid))
+        asyncio.run(roundtrip())
