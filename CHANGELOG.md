@@ -1,25 +1,17 @@
 # Changelog
 
-## 5.0.15 (2026-10-06)
+## 5.0.15 (2026-10-07)
 
-- Connect the Custom Actions Generate YAML and Copy buttons. Generate a safely quoted sentence-trigger automation locally, validate service/entity identifiers, preserve output across language changes, and report clipboard refusal without claiming success. Editing the draft clears obsolete output; no HA service or storage calls run.
-- Refresh navigation and guidance after ordinary Home Assistant language updates while preserving unsaved editor/import/action values, dynamic slots, focus and selection. Role changes still remove privileged editing; locale changes do not read or mutate the backend again.
-- Serialize pending sentence writes across integration reloads, preserving acknowledged sentences and their stable IDs. Concurrent edits with an outdated revision report a conflict.
-- Preserve quoted phrases, response text, intent names and colon-containing slot values when importing the card's own YAML export.
-- Follow the selected PL/EN language in list, import/export and custom-action descriptions.
-- Wrap sentence actions below long text when the card is narrow, including narrow Sections cards in wide windows.
-- Use Home Assistant’s bundled PyYAML dependency instead of redundantly declaring it in the custom integration manifest.
-- Fill the sentence editor after rendering it, keeping trigger, intent, response and slots when opened from the selector or list; preserve the draft after a conflicting save.
-- Serialize sentence file and ID sidecar operations across executor threads. Concurrent editors using the same revision cannot both commit, and simultaneous creates preserve both records.
-- Register one storage-mode Lovelace resource and an administrator-only sidebar panel; keep an existing HACS resource, refresh the owned resource on upgrade and remove owned UI entries on unload. YAML mode retains the frontend fallback.
-- Require Home Assistant 2025.2 for Lovelace resource and panel APIs.
-- Write sentence YAML and sidecar files through a synced temporary file and atomic replace, preserving the old file on interrupted serialization.
-- Send a YAML revision with each card row and reject update/delete when the file changed since that read. The card keeps the edit visible for review after a conflict.
-- Recover stable sentence IDs after interrupted main/metadata writes and retain unchanged row IDs after manual reordering or removal. Metadata contains fingerprints and before/after IDs, never copied sentence text.
-- Exclude symlinks escaping custom_sentences from list reads.
-- Encode new opaque IDs for intent names containing colons while preserving existing IDs.
-- Clear editing identity and pending responses after role/account changes or disconnect; show read errors and clear them after a successful retry.
-- Display Assist error responses as failed tests and use the configured Home Assistant language.
+- Register one versioned Lovelace resource in storage mode and an administrator sidebar panel; preserve existing external resources, clean up owned UI on unload, and retain the YAML-mode frontend fallback. Require Home Assistant 2025.2; use its bundled PyYAML.
+- Serialize internal file operations across executor threads and config-entry reload. Reject stale update/delete revisions and retain conflicting drafts. Independent external file editors are outside the atomic check/write guarantee.
+- Write YAML atomically and recover stable IDs after interrupted YAML/metadata writes. Retain unchanged IDs after manual reordering, preserve legacy IDs, and support intent names containing colons. Metadata contains fingerprints and IDs, without copied sentence text.
+- Exclude symlinks escaping the sentence directory; clear private drafts and invalidate pending responses after role/account changes or disconnect. Hide privileged editing/import/delete controls for household users.
+- Preserve editor, import and action drafts, dynamic slots, focus and selection across ordinary PL/EN language changes. Fill the editor correctly after rendering and preserve quoted content when importing the card’s own export.
+- Make list search work for phrases, intents and responses. Show read errors with Retry, give household users accurate empty-list guidance, and bind persistent navigation/retry handlers once.
+- Wrap buttons and slot fields within narrow cards, including Sections cards inside wide windows.
+- Display real Assist error responses as failed tests and use Home Assistant’s selected language.
+- Connect Custom Actions Generate YAML and Copy. Generate safely quoted automation YAML locally, validate service/entity identifiers, invalidate stale output after edits, and report clipboard refusal accurately. Generation never calls a service or saves an automation.
+- Show dismissible support links only to administrators, with `show_support: false` available.
 
 ## 5.0.14 (2026-08-28)
 

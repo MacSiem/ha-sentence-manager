@@ -30,18 +30,18 @@ Manage Home Assistant Assist custom sentences (intents, slots, responses) from a
 
 | Light | Dark |
 |---|---|
-| ![HA Sentences tab, light theme](docs/screenshots/card-main-light.png) | ![HA Sentences tab, dark theme](docs/screenshots/card-main-dark.png) |
+| ![Sentences tab, light theme](docs/screenshots/card-main-light.png) | ![Sentences tab, dark theme](docs/screenshots/card-main-dark.png) |
 
-*The default "HA Sentences" tab with synthetic example phrases: intent,
-sentence, slot-list and category counts, grouped by category. Dark mode
-follows your Home Assistant theme.*
+*The searchable Sentences tab with synthetic QA phrases, captured in a real Home Assistant dashboard. Dark mode follows your Home Assistant theme.*
 
 ## Installation
 
-1. Open HACS → Integrations → ⋮ → **Custom repositories**. Add `https://github.com/MacSiem/ha-sentence-manager` with category **Integration**.
+1. Open HACS → Integrations and search for **HA Sentence Manager** in the default catalog.
 2. Install **HA Sentence Manager** and **restart Home Assistant**.
 3. **Settings → Devices & services → Add Integration → HA Sentence Manager.**
 4. Administrators can open **Sentence Manager** in the sidebar. The Lovelace card is registered automatically — add `type: custom:ha-sentence-manager` to a dashboard if preferred.
+
+If it is absent from your HACS catalog, refresh HACS or add `https://github.com/MacSiem/ha-sentence-manager` under **Custom repositories** with category **Integration**.
 
 If you previously installed v4 as a Lovelace plugin, the integration preserves that existing resource to avoid loading the element twice. To migrate to the bundled card, remove the old `/local/community/ha-sentence-manager/ha-sentence-manager.js` resource entry under *Dashboards → Resources* — it's superseded by the integration-served `/ha_sentence_manager/ha-sentence-manager.js`.
 
@@ -57,7 +57,9 @@ The server serializes its own executor operations, including writes pending acro
 type: custom:ha-sentence-manager
 ```
 
-No options are required.
+No options are required. Optional `show_support: false` hides the administrator support link.
+
+The list searches phrases, intent names and responses. A failed read shows an error with Retry rather than an empty list. Household users can view and export sentences; an administrator creates or changes them.
 
 ## Card tabs
 
