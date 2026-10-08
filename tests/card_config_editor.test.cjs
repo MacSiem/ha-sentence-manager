@@ -11,6 +11,8 @@ test('native config editor emits immutable complete config and accepts subsequen
   editor.setConfig(original);dom.window.document.body.append(editor);
   const events=[];editor.addEventListener('config-changed',e=>events.push(e));
   const title=editor.querySelector('#title');title.value='<title> & "quoted"';title.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  title.focus();title.setSelectionRange(2,5);editor.setConfig(events[0].detail.config);
+  assert.equal(editor.querySelector('#title'),title);assert.equal(dom.window.document.activeElement,title);assert.equal(title.selectionStart,2);assert.equal(title.selectionEnd,5);
   assert.equal(events.length,1);assert.equal(events[0].detail.config.title,title.value);
   assert.equal(events[0].detail.config.show_support,false);assert.equal(events[0].bubbles,true);assert.equal(events[0].composed,true);assert.equal(original.title,'Before');
   const language=editor.querySelector('#language');language.value='en';language.dispatchEvent(new dom.window.Event('input',{bubbles:true}));

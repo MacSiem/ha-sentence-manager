@@ -3546,7 +3546,13 @@ if (!customElements.get('ha-sentence-manager')) { customElements.define('ha-sent
 class HASentenceManagerEditor extends HTMLElement {
   setConfig(config) {
     this.config = { ...config };
-    if (this.isConnected) this._render();
+    if (this.isConnected) {
+      for (const key of ['title', 'language']) {
+        const input = this.querySelector(`#${key}`);
+        const value = String(this.config[key] ?? (key === 'title' ? 'Sentence Manager' : 'en'));
+        if (input && input.value !== value) input.value = value;
+      }
+    }
   }
 
   connectedCallback() {
