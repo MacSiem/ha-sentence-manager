@@ -1455,7 +1455,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   _renderHaSentencesTab() {
-    const lang = _esc(this.config.language || 'pl');
+    const lang = this.config.language || 'pl';
     const isActive = this.currentTab === 'ha-sentences';
 
     // If we have parsed sentences (loaded from file via PowerShell deploy)
@@ -1568,7 +1568,7 @@ class HASentenceManager extends HTMLElement {
         <div class="ha-sentences-info">
           <div class="info-card">
             <h3>📁 ${this._lang === 'pl' ? 'Custom Sentences w Home Assistant' : 'Custom Sentences in Home Assistant'}</h3>
-            <p>${this._lang === 'pl' ? 'HA automatycznie wczytuje pliki YAML z katalogu <code>config/custom_sentences/</code> dla każdego języka (np. <code>pl/</code>, <code>en/</code>). Narzędzie szuka w katalogu skonfigurowanego języka (<code>' : 'HA automatically loads YAML files from <code>config/custom_sentences/</code> directory for each language (e.g., <code>pl/</code>, <code>en/</code>). The tool searches in the configured language directory (<code>'}${lang}${this._lang === 'pl' ? '</code>).' : '</code>).'}</p>
+            <p>${this._lang === 'pl' ? 'HA automatycznie wczytuje pliki YAML z katalogu <code>config/custom_sentences/</code> dla każdego języka (np. <code>pl/</code>, <code>en/</code>). Narzędzie szuka w katalogu skonfigurowanego języka (<code>' : 'HA automatically loads YAML files from <code>config/custom_sentences/</code> directory for each language (e.g., <code>pl/</code>, <code>en/</code>). The tool searches in the configured language directory (<code>'}${_esc(lang)}${this._lang === 'pl' ? '</code>).' : '</code>).'}</p>
             <p style="font-size:12px;color:var(--bento-text-secondary);margin-top:4px;">
               ℹ️ ${this._lang === 'pl' ? 'Nie trzeba nic dodawać do <code>configuration.yaml</code> — HA automatycznie wykrywa pliki w tym katalogu po restarcie.' : 'No need to add anything to <code>configuration.yaml</code> — HA automatically detects files in this directory after restart.'}
             </p>
@@ -1577,7 +1577,7 @@ class HASentenceManager extends HTMLElement {
               <code style="display:block;margin-top:4px;padding:8px 12px;background:var(--bento-bg);border-radius:var(--bento-radius-xs);font-size:12px;line-height:1.6;">
                 config/<br>
                 └─ custom_sentences/<br>
-                &nbsp;&nbsp;&nbsp;└─ ${lang}/<br>
+                &nbsp;&nbsp;&nbsp;└─ ${_esc(lang)}/<br>
                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ baby.yaml<br>
                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ lights.yaml<br>
                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ ... ${this._lang === 'pl' ? '(dowolna nazwa)' : '(any name)'}
@@ -1607,7 +1607,7 @@ class HASentenceManager extends HTMLElement {
                 </select>
                 <input type="text" id="ha-new-file-name" placeholder="${this._lang === 'pl' ? 'lub wpisz nazwę nowego pliku...' : 'or enter new file name...'}" style="flex:1;">
               </div>
-              <textarea id="ha-yaml-paste" class="yaml-editor" style="margin-top:8px;" placeholder="${this._lang === 'pl' ? 'Wklej zawartość pliku custom_sentences/' : 'Paste content of custom_sentences/'}${lang}${this._lang === 'pl' ? '/*.yaml tutaj...' : '/*.yaml here...'}"></textarea>
+              <textarea id="ha-yaml-paste" class="yaml-editor" style="margin-top:8px;" placeholder="${this._lang === 'pl' ? 'Wklej zawartość pliku custom_sentences/' : 'Paste content of custom_sentences/'}${_esc(lang)}${this._lang === 'pl' ? '/*.yaml tutaj...' : '/*.yaml here...'}"></textarea>
               <button class="btn btn-primary" id="parse-ha-yaml-btn" style="margin-top:8px;">🔍 ${this._lang === 'pl' ? 'Parsuj YAML' : 'Parse YAML'}</button>
             </div>
 
