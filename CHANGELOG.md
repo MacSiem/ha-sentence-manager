@@ -2,6 +2,9 @@
 
 ## 5.0.16 (2026-10-08)
 
+- Save Title and Language edits through Home Assistant’s `config-changed` event while preserving other card settings.
+- Clarify that the optional response field is an existing Assist response key; correct documentation about YAML sidecars.
+
 - Display configured language text with one HTML escape pass in sentence guidance, directory examples and generated YAML placeholders. Preserve HTML escaping at every insertion point.
 - Add browser DOM regression tests for hostile stored sentence content, editor/export textareas and configured language values.
 

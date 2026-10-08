@@ -5,9 +5,10 @@ Persists user-defined HA Assist sentences to Home Assistant's official
 intent)`` pair, named ``ha_sentence_manager_<intent>.yaml``.
 
 To keep the main file 100% schema-compatible with HA's intent_script
-loader, no extra keys are ever written into the data entries themselves.
+sentence loader, no extra keys are ever written into the data entries themselves.
 Stable per-entry IDs live in a sibling sidecar file with a dot prefix
-(``.ha_sentence_manager_<intent>.meta.yaml``) which HA ignores. The
+(``.ha_sentence_manager_<intent>.meta.yaml``). HA reads YAML sidecars too,
+but the current metadata keys are not used by its intent parser. The
 sidecar stores IDs, row fingerprints and a pending before/after snapshot.
 The main YAML replacement is the commit point; the next read recovers IDs
 from the snapshot matching the current YAML. Missing metadata receives

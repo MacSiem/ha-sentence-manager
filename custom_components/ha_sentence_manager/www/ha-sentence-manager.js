@@ -1742,8 +1742,8 @@ class HASentenceManager extends HTMLElement {
           </div>
 
           <div class="form-group">
-            <label for="response-input">${this._lang === 'pl' ? 'Szablon odpowiedzi (opcjonalny)' : 'Response Template (optional)'}</label>
-            <input type="text" id="response-input" placeholder="${this._lang === 'pl' ? 'np. Światło w {area} jest włączone' : 'e.g., {area} lights are now on'}" class="response-input">
+            <label for="response-input">${this._lang === 'pl' ? 'Klucz odpowiedzi HA (opcjonalny)' : 'HA response key (optional)'}</label>
+            <input type="text" id="response-input" placeholder="${this._lang === 'pl' ? 'np. default — klucz istniejącej odpowiedzi intencji' : 'e.g., default — an existing intent response key'}" class="response-input">
           </div>
 
           <div class="template-library">
@@ -3545,10 +3545,15 @@ if (!customElements.get('ha-sentence-manager')) { customElements.define('ha-sent
 
 class HASentenceManagerEditor extends HTMLElement {
   setConfig(config) {
-    this.config = config;
+    this.config = { ...config };
+    if (this.isConnected) this._render();
   }
 
   connectedCallback() {
+    this._render();
+  }
+
+  _render() {
     const _editorEscBase = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const _esc = (s) => _editorEscBase(String(s ?? ''));
     this.innerHTML = `
@@ -3567,6 +3572,14 @@ class HASentenceManagerEditor extends HTMLElement {
         </div>
       </div>
     `;
+    for (const key of ['title', 'language']) {
+      this.querySelector(`#${key}`).addEventListener('input', (event) => {
+        this.config = { ...this.config, [key]: event.target.value };
+        this.dispatchEvent(new CustomEvent('config-changed', {
+          detail: { config: { ...this.config } }, bubbles: true, composed: true,
+        }));
+      });
+    }
   }
 
 }
