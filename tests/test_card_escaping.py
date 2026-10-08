@@ -35,7 +35,7 @@ class CardEscapingTests(unittest.TestCase):
         source = CARD_PATH.read_text(encoding="utf-8")
 
         self.assertIn("${_esc(this.exportAsYaml())}", source)
-        self.assertIn("const lang = _esc(this.config.language || 'pl');", source)
+        self.assertIn("const lang = this.config.language || 'pl';", source)
 
     def test_frontend_stat_and_declared_floor_match_used_apis(self) -> None:
         frontend_source = (ROOT / "custom_components/ha_sentence_manager/frontend.py").read_text(encoding="utf-8")

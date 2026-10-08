@@ -66,7 +66,7 @@ The list searches phrases, intent names and responses. A failed read shows an er
 | Tab | What it does |
 |---|---|
 | **HA Sentences** (default) | Reads everything persisted via the integration and groups it by intent and by a guessed category (Lighting, Climate, Media, Covers, Security, Scenes, Other). |
-| **Editor** | Form to create or edit a sentence: trigger phrase, intent name, slots, response, with quick-fill templates (Lights, Climate, Media, Covers, Locks, Scenes). |
+| **Editor** | Form to create or edit a sentence: trigger phrase, intent name, slots, HA response key, with quick-fill templates (Lights, Climate, Media, Covers, Locks, Scenes). |
 | **Sentences** | Searchable flat list of every persisted entry with Edit/Delete actions. |
 | **Test** | Sends the typed phrase to HA's own `conversation/process` WebSocket command and shows the matched intent and response — a live round-trip through Assist, not a local regex simulation. |
 | **Import/Export** | Exports the currently loaded sentences as a YAML text block, or bulk-imports pasted YAML (each parsed row is created individually through the same admin-only `create` command as the Editor tab). |
@@ -94,7 +94,7 @@ Consumed by the bundled card; useful if you're scripting against it directly.
 | `ha_sentence_manager/delete` | Admin | Removes `sentence_id` using the last-read `revision` (and its file, if it was the last entry); returns `{ok}`. |
 | `ha_sentence_manager/reload` | Admin | Triggers `conversation.reload`, returns `{ok}`. |
 
-A persisted entry becomes a plain HA `custom_sentences` YAML file — for example, `ha_sentence_manager/create` with `{language: "en", intent: "HassLightSet", sentences: ["Turn on the {area} lights"], slots: {area: "string"}, response: "{area} lights are now on"}` is written to `custom_sentences/en/ha_sentence_manager_HassLightSet.yaml` as:
+A persisted entry becomes a plain HA `custom_sentences` YAML file — for example, `ha_sentence_manager/create` with `{language: "en", intent: "HassLightSet", sentences: ["Turn on the {area} lights"], slots: {area: "string"}, response: "default"}` is written to `custom_sentences/en/ha_sentence_manager_HassLightSet.yaml` as:
 
 ```yaml
 language: en
@@ -105,10 +105,12 @@ intents:
           - "Turn on the {area} lights"
         slots:
           area: string
-        response: "{area} lights are now on"
+        response: "default"
 ```
 
 with a sidecar `.ha_sentence_manager_HassLightSet.meta.yaml` holding the matching `ids` list.
+
+`response` is the key of an existing Assist intent response, such as `default`; it is not spoken text or a template definition. Home Assistant resolves it through `responses.intents[<intent>][<key>]`. Leave it empty to use the intent handler’s normal response. This integration does not create response mappings or register intent handlers: a custom intent requires an existing handler or `intent_script`. Sidecar YAML is also read by the HA sentence loader; its current metadata keys are ignored by the intent parser.
 
 ## Upgrade notes (4.x → 5.0)
 

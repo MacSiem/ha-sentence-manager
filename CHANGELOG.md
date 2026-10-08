@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.16 (2026-10-08)
+
+- Save Title and Language edits through Home Assistant’s `config-changed` event while preserving other card settings.
+- Clarify that the optional response field is an existing Assist response key; correct documentation about YAML sidecars.
+
+- Display configured language text with one HTML escape pass in sentence guidance, directory examples and generated YAML placeholders. Preserve HTML escaping at every insertion point.
+- Add browser DOM regression tests for hostile stored sentence content, editor/export textareas and configured language values.
+
 ## 5.0.15 (2026-10-07)
 
 - Register one versioned Lovelace resource in storage mode and an administrator sidebar panel; preserve existing external resources, clean up owned UI on unload, and retain the YAML-mode frontend fallback. Require Home Assistant 2025.2; use its bundled PyYAML.
