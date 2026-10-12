@@ -2,6 +2,44 @@
 (function() {
 'use strict';
 
+// BEGIN HA TOOLS UI V3 source-sha256=029c06206e55abad9aa09dfcf65bb13027ec24ce6a0bfacc45a938891b27254e
+// HA Tools v3: vendored inside each consumer's own closure, never a window API.
+function createUiV3({ language = 'en' } = {}) {
+  const pl = String(language).startsWith('pl');
+  const states = {
+    success: ['Success', 'Sukces', '✓'],
+    partial: ['Partial', 'Częściowo', '½'],
+    unconfirmed: ['Unconfirmed', 'Niepotwierdzony', '?'],
+    error: ['Error', 'Błąd', '✕'],
+    not_checked: ['Not checked', 'Nie sprawdzono', '–'],
+    no_data: ['No data', 'Brak danych', '∅'],
+  };
+  const status = (value) => {
+    const code = typeof value === 'string' && Object.hasOwn(states, value) ? value : 'not_checked';
+    const row = states[code];
+    return { code, label: row[pl ? 1 : 0], icon: row[2], countsAsSuccess: code === 'success' };
+  };
+  const statusHtml = (value) => {
+    const result = status(value);
+    return `<span class="ht-result-state ht-result-state--${result.code}" data-result-state="${result.code}"><span aria-hidden="true">${result.icon}</span> ${result.label}</span>`;
+  };
+  const css = `
+.ht-result-state { display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid currentColor;border-radius:6px;font-size:12px;line-height:1.4;white-space:normal; }
+.ht-result-state--success { color:#237b3d;background:rgba(35,123,61,.10); }
+.ht-result-state--partial { color:#966400;background:rgba(150,100,0,.10); }
+.ht-result-state--unconfirmed { color:#ad5200;background:rgba(173,82,0,.10); }
+.ht-result-state--error { color:#c32b2b;background:rgba(195,43,43,.10); }
+.ht-result-state--not_checked,.ht-result-state--no_data { color:var(--secondary-text-color,#666);background:transparent; }
+.ht-result-state--no_data { border-style:dashed; }
+:host(.bento-dark) .ht-result-state--success { color:#81cf99; }
+:host(.bento-dark) .ht-result-state--partial { color:#efd080; }
+:host(.bento-dark) .ht-result-state--unconfirmed { color:#ffb97b; }
+:host(.bento-dark) .ht-result-state--error { color:#ff9999; }
+`;
+  return { status, statusHtml, css };
+}
+// END HA TOOLS UI V3
+
 // XSS protection helper (reuse global from panel, fallback for standalone)
 const _asText = (s) => String(s ?? '');
 const _escBase = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -529,6 +567,10 @@ class HASentenceManager extends HTMLElement {
     this._autoDetectRan = false;
     this._testResultHA = null;
     this._testLoading = false;
+    this._testDraft = '';
+    this._importDraft = '';
+    this._importResult = null;
+    this._importBusy = false;
     // --- Throttle fields ---
     this._lastRenderTime = 0;
     this._renderScheduled = false;
@@ -866,8 +908,8 @@ class HASentenceManager extends HTMLElement {
   async _apiReload() {
     this._requireSentenceAdmin();
     if (!this._hass) return;
-    try { await this._hass.callWS({ type: 'ha_sentence_manager/reload' }); }
-    catch (e) { console.warn('[ha-sentence-manager] reload failed', e); }
+    try { await this._hass.callWS({ type: 'ha_sentence_manager/reload' }); return true; }
+    catch (e) { console.warn('[ha-sentence-manager] reload failed'); return false; }
   }
   async _reloadFromApi() {
     // Map server entries → card row model. Server returns
@@ -1026,38 +1068,48 @@ class HASentenceManager extends HTMLElement {
   // Detect available intents by testing known sentences
   // Test sentence via HA Conversation API
   async _testSentenceHA(text) {
-    if (!this._hass || !text.trim()) return;
+    if (!this._hass || typeof text !== 'string' || !text.trim() || this._testLoading) return;
     const epoch = this._dataEpoch;
+    this._testDraft = text;
     this._testLoading = true;
     this._testResultHA = null;
     this.render();
     try {
       const lang = this.config.language || this._hass.config?.language || 'en';
-      const result = await this._hass.callWS({
-        type: 'conversation/process',
-        text: text.trim(),
-        language: lang,
-        agent_id: 'conversation.home_assistant'
-      });
+      const result = await this._hass.callWS({ type: 'conversation/process', text: text.trim(), language: lang, agent_id: 'conversation.home_assistant' });
       if (epoch !== this._dataEpoch || !this._hass) return;
+      const response = result?.response;
+      const data = response?.data;
+      const responseType = typeof response?.response_type === 'string' ? response.response_type : 'unknown';
+      let status = 'unconfirmed';
+      if (responseType === 'error') status = 'error';
+      else if (['action_done', 'query_answer'].includes(responseType) && data && Array.isArray(data.success) && Array.isArray(data.failed)) {
+        const validTarget = target => target && typeof target === 'object' && typeof target.name === 'string' && typeof target.type === 'string';
+        if (data.success.every(validTarget) && data.failed.every(validTarget)) {
+          status = data.failed.length ? (data.success.length ? 'partial' : 'error') : 'success';
+        }
+      }
+      const speech = response?.speech?.plain?.speech;
       this._testResultHA = {
-        success: result?.response?.response_type !== 'error',
-        input: text,
-        response: result?.response?.speech?.plain?.speech || 'No response',
-        responseType: result?.response?.response_type || 'unknown',
-        conversationId: result?.conversation_id,
-        data: result?.response?.data || null
+        status, success: status === 'success', input: text,
+        response: typeof speech === 'string' ? speech : '', responseType,
+        conversationId: typeof result?.conversation_id === 'string' ? result.conversation_id : null,
+        data: data && typeof data === 'object' && !Array.isArray(data) ? data : null,
       };
-    } catch(e) {
+    } catch (e) {
       if (epoch !== this._dataEpoch || !this._hass) return;
-      this._testResultHA = {
-        success: false,
-        input: text,
-        error: e.message
-      };
+      this._testResultHA = { status: 'error', success: false, input: text, error: this._lang === 'pl' ? 'Nie otrzymano prawidłowej odpowiedzi z HA.' : 'No valid response was received from HA.' };
     }
     this._testLoading = false;
     this.render();
+  }
+
+  async retryTestSentenceHA() {
+    if (!this._hass || this._testLoading || !this._testResultHA || this._testResultHA.status === 'success') return;
+    const previous = this._testResultHA.input;
+    const warning = this._lang === 'pl' ? 'Komenda mogła już zostać wykonana. Ponowienie może powtórzyć działanie. Wysłać ponownie?' : 'The command may already have run. A retry may repeat the action. Send it again?';
+    if (!confirm(warning)) return;
+    await this._testSentenceHA(previous);
   }
 
   highlightSlots(text) {
@@ -1111,7 +1163,9 @@ class HASentenceManager extends HTMLElement {
 
   async importFromYaml(yamlText) {
     if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
+    if (this._importBusy) return;
     const epoch = this._dataEpoch;
+    this._importDraft = yamlText;
     try {
       const lines = yamlText.split('\n');
       const imported = [];
@@ -1156,34 +1210,90 @@ class HASentenceManager extends HTMLElement {
         this.showNotification(this._lang === 'pl' ? 'Brak rozpoznanych zdań w YAML' : 'No sentences recognized in YAML', 'info');
         return;
       }
-      const language = (this._currentLanguage || this._hass?.config?.language || 'en');
-      let created = 0;
-      for (const item of imported) {
-        if (epoch !== this._dataEpoch) return;
-        try {
-          await this._apiCreate({
-            language,
-            intent: item.intent || 'CustomIntent',
-            sentences: [item.trigger],
-            slots: item.slots || {},
-            response: item.response || '',
-          });
-          created++;
-        } catch (e) {
-      if (epoch !== this._dataEpoch) return;
-          console.warn('[ha-sentence-manager] import row failed', e, item);
-        }
-      }
-      if (epoch !== this._dataEpoch) return;
-      await this._reloadFromApi();
-      if (epoch !== this._dataEpoch) return;
-      await this._apiReload();
-    if (epoch !== this._dataEpoch) return;
-      this.showNotification(this._lang === 'pl' ? `Zaimportowano ${created} zdań` : `Imported ${created} sentences`, 'success');
+      const language = this._currentLanguage || this._hass?.config?.language || 'en';
+      const rows = imported.map((item, index) => ({ row: index + 1, payload: { language, intent: item.intent || 'CustomIntent', sentences: [item.trigger], slots: item.slots || {}, response: item.response || '' } }));
+      this._importResult = { epoch, language, status: 'not_checked', total: rows.length, created: 0, failed: [] };
+      await this._runSentenceImport(rows);
+
     } catch (error) {
       if (epoch !== this._dataEpoch) return;
+      this._importResult = { epoch, status: 'error', total: 0, created: 0, failed: [], parseFailed: true };
+      this.render();
       this.showNotification(this._lang === 'pl' ? 'Błąd importu YAML' : 'Error importing YAML', 'error');
     }
+  }
+
+  _importFailureReason(code) {
+    const reasons = {
+      invalid_payload: ['Invalid sentence row', 'Nieprawidłowy wpis zdania'],
+      conflict: ['The stored sentence changed. Reload and review it.', 'Zapisane zdanie się zmieniło. Odśwież i sprawdź je.'],
+      create_failed: ['The server could not save the sentence', 'Serwer nie mógł zapisać zdania'],
+      unauthorized: ['Administrator access is required', 'Wymagane są uprawnienia administratora'],
+    };
+    return (reasons[code] || ['Save could not be confirmed. Review the stored list before retrying.', 'Nie potwierdzono zapisu. Sprawdź zapisaną listę przed ponowieniem.'])[this._lang === 'pl' ? 1 : 0];
+  }
+
+  async _runSentenceImport(rows) {
+    const result = this._importResult;
+    const current = () => result && result === this._importResult && result.epoch === this._dataEpoch && this._canManageSentences();
+    if (!current() || this._importBusy) return;
+    this._importBusy = true;
+    result.failed = [];
+    this.render();
+    try {
+      for (const row of rows) {
+        if (!current()) return;
+        try {
+          await this._apiCreate(row.payload);
+          if (!current()) return;
+          result.created++;
+        } catch (e) {
+          if (!current()) return;
+          result.failed.push({ ...row, code: typeof e?.code === 'string' ? e.code : 'unconfirmed' });
+        }
+      }
+      if (!current()) return;
+      await this._reloadFromApi();
+      if (!current()) return;
+      result.listUnavailable = !!this._apiError;
+      const reloaded = await this._apiReload();
+      if (!current()) return;
+      result.reloadFailed = reloaded === false;
+      result.status = result.failed.length || result.reloadFailed || result.listUnavailable ? (result.created ? 'partial' : 'error') : 'success';
+    } finally {
+      if (current()) {
+        this._importBusy = false;
+        this.render();
+      }
+    }
+  }
+
+  async retryImportFailed() {
+    const result = this._importResult;
+    if (!result || result.epoch !== this._dataEpoch || !this._canManageSentences() || this._importBusy || !result.failed.length) return;
+    // Reconcile an uncertain write against the authoritative list before creating again.
+    let stored;
+    try { stored = await this._apiList(result.language); } catch (e) { result.listUnavailable = true; this.render(); return; }
+    if (result !== this._importResult || result.epoch !== this._dataEpoch || !this._canManageSentences() || !Array.isArray(stored)) return;
+    const rows = [];
+    for (const row of result.failed) {
+      const p = row.payload;
+      const sameSlots = value => JSON.stringify(Object.entries(value || {}).sort()) === JSON.stringify(Object.entries(p.slots).sort());
+      const saved = stored.some(item => item.language === p.language && item.intent === p.intent && Array.isArray(item.sentences) && item.sentences.includes(p.sentences[0]) && (item.response || '') === p.response && sameSlots(item.slots));
+      if (saved) result.created++; else rows.push(row);
+    }
+    await this._runSentenceImport(rows);
+  }
+
+  _renderImportResult() {
+    const result = this._importResult;
+    if (!result) return '';
+    const pl = this._lang === 'pl';
+    const count = pl ? `Zapisano ${result.created} z ${result.total} zdań` : `Saved ${result.created} of ${result.total} sentences`;
+    const rows = result.failed.map(row => `<li>${pl ? 'Wiersz' : 'Row'} ${row.row}: ${_esc(this._importFailureReason(row.code))}</li>`).join('');
+    const reload = result.reloadFailed || result.listUnavailable ? `<p>${pl ? 'Zapis i przeładowanie to osobne wyniki. Odśwież listę i przeładuj zdania.' : 'Saving and reloading are separate outcomes. Refresh the list and reload sentences.'}</p>` : '';
+    const parse = result.parseFailed ? `<p>${pl ? 'Nie rozpoznano poprawnego YAML.' : 'No valid YAML was recognized.'}</p>` : '';
+    return `<div role="status">${createUiV3({ language: this._lang }).statusHtml(this._importBusy ? 'not_checked' : result.status)}<p>${count}</p>${parse}${rows ? `<ul>${rows}</ul>` : ''}${reload}${rows ? `<button type="button" class="btn btn-secondary" id="retry-import-failed-btn" ${this._importBusy ? 'disabled' : ''}>${pl ? 'Ponów tylko niezapisane' : 'Retry failed rows only'}</button>` : ''}</div>`;
   }
 
   showNotification(message, type = 'info') {
@@ -1831,8 +1941,8 @@ class HASentenceManager extends HTMLElement {
           <div class="loading-spinner"><div class="spinner"></div> ${this._lang === 'pl' ? 'Wysyłanie do HA Conversation API...' : 'Sending to HA Conversation API...'}</div>
         </div>`;
     } else if (haResult) {
-      if (haResult.success) {
-        const isMatch = haResult.responseType === 'action_done' || haResult.responseType === 'query_answer';
+      if (haResult.status === 'success' || haResult.status === 'partial') {
+        const isMatch = haResult.status === 'success';
         // Extract intent name from the conversation/process response data structure
         // HA returns: response.data.success_results[0].result.intent.name
         // or older: response.data.success.result.intent.name
@@ -1853,7 +1963,7 @@ class HASentenceManager extends HTMLElement {
         haResultHtml = `
           <div class="tryit-result-card ${isMatch ? 'tryit-match' : 'tryit-nomatch'}">
             <div class="tryit-result-header">
-              <span class="badge ${isMatch ? 'badge-success' : 'badge-warning'}">${isMatch ? '✅ ' + (this._lang === 'pl' ? 'Rozpoznano' : 'Matched') : '⚠️ ' + (this._lang === 'pl' ? 'Brak dopasowania' : 'No match')}</span>
+              ${createUiV3({ language: this._lang }).statusHtml(haResult.status)}
               <span class="tryit-response-type">${this._escapeHtml(haResult.responseType)}</span>
             </div>
             <div class="tryit-speech">
@@ -1864,17 +1974,20 @@ class HASentenceManager extends HTMLElement {
             <div class="tryit-input-echo"><span class="tryit-input-label">${this._lang === 'pl' ? 'Zapytanie:' : 'Input:'}</span> <code>${this._escapeHtml(haResult.input)}</code></div>
           </div>
         `;
+      } else if (haResult.status === 'unconfirmed') {
+        haResultHtml = `<div class="tryit-result-card tryit-nomatch">${createUiV3({ language: this._lang }).statusHtml('unconfirmed')}<p>${this._lang === 'pl' ? 'Nie potwierdzono wykonania komendy. Sprawdź stan przed ponowieniem.' : 'The command outcome was not confirmed. Check the state before retrying.'}</p></div>`;
       } else {
         haResultHtml = `
           <div class="tryit-result-card tryit-error">
             <div class="tryit-result-header">
-              <span class="badge badge-error">❌ ${this._lang === 'pl' ? 'Błąd' : 'Error'}</span>
+              ${createUiV3({ language: this._lang }).statusHtml('error')}
             </div>
             <div class="tryit-speech tryit-speech-error">${this._escapeHtml(haResult.error || haResult.response || 'Unknown error')}</div>
             <div class="tryit-input-echo"><span class="tryit-input-label">${this._lang === 'pl' ? 'Zapytanie:' : 'Input:'}</span> <code>${this._escapeHtml(haResult.input)}</code></div>
           </div>`;
       }
     }
+    if (haResult && haResult.status !== 'success') haResultHtml += `<button type="button" class="btn btn-secondary" id="retry-test-ha-btn">${this._lang === 'pl' ? 'Ponów po sprawdzeniu' : 'Retry after checking'}</button>`;
     return `
       <div class="tab-panel ${this.currentTab === 'test' ? 'active' : ''}" data-tab-content="test">
         <div class="test-section">
@@ -1888,8 +2001,8 @@ class HASentenceManager extends HTMLElement {
               <span class="tryit-hint">${this._lang === 'pl' ? 'Wysyła tekst do HA Conversation API i pokazuje odpowiedź + dopasowany intent.' : 'Sends text to HA Conversation API and shows the response + matched intent.'}</span>
             </div>
             <div class="tryit-input-row">
-              <input type="text" id="test-input" placeholder="${this._lang === 'pl' ? 'Wpisz komendę głosową, np. włącz światło w salonie...' : 'Enter voice command, e.g. turn on the living room light...'}" class="test-input tryit-input">
-              <button class="btn btn-primary tryit-btn" id="test-ha-btn">▶ ${this._lang === 'pl' ? 'Testuj' : 'Test'}</button>
+              <input type="text" id="test-input" value="${_esc(this._testDraft || '')}" placeholder="${this._lang === 'pl' ? 'Wpisz komendę głosową, np. włącz światło w salonie...' : 'Enter voice command, e.g. turn on the living room light...'}" class="test-input tryit-input">
+              <button class="btn btn-primary tryit-btn" id="test-ha-btn" ${this._testLoading ? 'disabled' : ''}>▶ ${this._lang === 'pl' ? 'Testuj' : 'Test'}</button>
             </div>
             <div class="quick-test-phrases" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
               <span style="font-size:12px;color:var(--bento-text-muted);margin-right:4px;">${this._lang === 'pl' ? 'Szybki test:' : 'Quick test:'}</span>
@@ -1932,8 +2045,9 @@ class HASentenceManager extends HTMLElement {
 
           ${this._canManageSentences() ? `<div class="import-container">
             <h3>${this._lang === 'pl' ? 'Import z YAML' : 'Import from YAML'}</h3>
-            <textarea id="yaml-input" class="yaml-editor" placeholder="${this._lang === 'pl' ? 'Wklej YAML tutaj...' : 'Paste YAML here...'}"></textarea>
-            <button class="btn btn-primary" id="import-yaml-btn">${this._lang === 'pl' ? 'Importuj zdania' : 'Import Sentences'}</button>
+            <textarea id="yaml-input" class="yaml-editor" placeholder="${this._lang === 'pl' ? 'Wklej YAML tutaj...' : 'Paste YAML here...'}">${_esc(this._importDraft || '')}</textarea>
+            <button class="btn btn-primary" id="import-yaml-btn" ${this._importBusy ? 'disabled' : ''}>${this._lang === 'pl' ? 'Importuj zdania' : 'Import Sentences'}</button>
+            ${this._renderImportResult()}
           </div>` : this._sentenceReadOnlyNotice()}
         </div>
       </div>
@@ -1956,6 +2070,9 @@ class HASentenceManager extends HTMLElement {
   }
 
   attachEventListeners() {
+    this.shadowRoot.getElementById('retry-import-failed-btn')?.addEventListener('click', () => this.retryImportFailed());
+    this.shadowRoot.getElementById('retry-test-ha-btn')?.addEventListener('click', () => this.retryTestSentenceHA());
+    this.shadowRoot.getElementById('test-input')?.addEventListener('input', event => { this._testDraft = event.target.value; });
     this.shadowRoot.getElementById('btn-generate-action')?.addEventListener('click', () => this._generateActionYaml());
     this.shadowRoot.getElementById('btn-copy-action-yaml')?.addEventListener('click', () => this._copyActionYaml());
     for (const id of ['action-trigger', 'action-trigger-en', 'action-service', 'action-entity']) {
@@ -2170,7 +2287,7 @@ class HASentenceManager extends HTMLElement {
 
   getStyles() {
     return `
-      <style>${HA_SENTENCE_MANAGER_BENTO_CSS}
+      <style>${HA_SENTENCE_MANAGER_BENTO_CSS}${createUiV3({ language: this._lang }).css}
 /* === HA Tools split — premium banners (donate / intro / prereq) === */
 
 /* Donation footer — diamond top */
@@ -3469,6 +3586,10 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     this._autoDetectRan = false;
     this._testResultHA = null;
     this._testLoading = false;
+    this._testDraft = '';
+    this._importDraft = '';
+    this._importResult = null;
+    this._importBusy = false;
     this._generatedActionYaml = null;
   }
 
