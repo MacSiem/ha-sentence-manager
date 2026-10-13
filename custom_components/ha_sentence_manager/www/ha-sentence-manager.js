@@ -1685,6 +1685,16 @@ class HASentenceManager extends HTMLElement {
   }
 
   _bindSentenceReportConnection() {
+    if (!this._reportBrowserListener && this.isConnected) {
+      this._reportBrowserOffline = navigator.onLine === false;
+      this._reportBrowserListener = event => {
+        this._reportBrowserOffline = event.type === 'offline';
+        this._syncSentenceReportState();
+        this.render();
+      };
+      window.addEventListener('offline', this._reportBrowserListener);
+      window.addEventListener('online', this._reportBrowserListener);
+    }
     const connection = this._hass?.connection || null;
     if (connection === this._reportConnectionRef) return;
     for (const remove of this._reportConnectionListeners) remove();
@@ -1712,22 +1722,24 @@ class HASentenceManager extends HTMLElement {
     try {
       this._bindSentenceReportConnection();
       const connection = this._reportConnectionRef;
-      const connected = !!this._hass && !!connection && !this._reportConnectionOffline && connection.connected !== false &&
+      const connected = !!this._hass && !!connection && navigator.onLine !== false && !this._reportBrowserOffline && !this._reportConnectionOffline && connection.connected !== false &&
         (connection.connected === true || connection.socket?.readyState === 1) &&
         (connection.socket?.readyState === undefined || connection.socket.readyState === 1);
       const rawUser = this._hass?.user?.id;
       const hasUser = typeof rawUser === 'string' && rawUser.trim().length > 0;
       const userId = hasUser ? rawUser : 'missing-user';
       const role = this._hass?.user?.is_admin === true ? 'admin' : 'member';
+      const active = this._hass?.user?.is_active !== false;
+      const commandLanguage = this.config?.language || this._hass?.config?.language;
       const old = this._reportObserved;
       if ((this._reportConnectionWasOnline === true && !connected) ||
-          (old && (old.userId !== userId || old.role !== role))) this._dropSentenceReportResults();
+          (old && (old.userId !== userId || old.role !== role || old.active !== active || old.commandLanguage !== commandLanguage))) this._dropSentenceReportResults();
       this._reportConnectionWasOnline = connected;
       const snapshot = this._sentenceReportModel();
       const serialized = snapshot ? JSON.stringify(snapshot, null, 2) + '\n' : '';
-      const observed = { connected, userId, hasUser, role, connectionId: this._reportConnectionSerial,
+      const observed = { connected, userId, hasUser, role, active, connectionId: this._reportConnectionSerial,
         sourceEpoch: this._reportSourceEpoch, dataEpoch: this._dataEpoch, language: this._lang,
-        configRef: this.config, filterLanguage: this._currentLanguage, commandLanguage: this.config?.language || this._hass?.config?.language,
+        configRef: this.config, filterLanguage: this._currentLanguage, commandLanguage,
         importRef: this._importResult, assistRef: this._testResultHA,
         busy: this._importBusy === true || this._testLoading === true, serialized };
       const changed = !old || Object.keys(observed).some(key => old[key] !== observed[key]);
@@ -1736,7 +1748,7 @@ class HASentenceManager extends HTMLElement {
       this._reportObserved = observed;
       this._reportContext = Object.freeze({ role, userId, connectionId: this._reportConnectionSerial,
         datasetId: 'sentence-current-session-results', revision: this._reportRevision, connected,
-        canExport: hasUser && connected, sourceConfirmed: connected && !!snapshot && !observed.busy });
+        canExport: hasUser && active && connected, sourceConfirmed: active && connected && !!snapshot && !observed.busy });
       if (this._reportExport && this._reportExportLanguage !== this._lang) this._reportLocaleNeedsRefresh = true;
       if (changed) this._reportExport?.contextChanged();
     } finally { this._reportSyncing = false; }
@@ -1877,6 +1889,9 @@ class HASentenceManager extends HTMLElement {
 
   _destroySentenceReport() {
     this._reportDisposed = true;
+    window.removeEventListener('offline', this._reportBrowserListener);
+    window.removeEventListener('online', this._reportBrowserListener);
+    this._reportBrowserListener = null;
     this._reportExport?.destroy(); this._reportExport = null;
     for (const remove of this._reportConnectionListeners) remove();
     this._reportConnectionListeners = [];
