@@ -1852,6 +1852,9 @@ class HASentenceManager extends HTMLElement {
   }
 
   _refreshSentenceReportLocale() {
+    // The dialog has its own shadow host; update only its theme class so focus,
+    // selections and the reviewed bytes survive a live HA theme change.
+    this.shadowRoot?.querySelector('[data-ha-tools-export]')?.classList.toggle('bento-dark', this.classList.contains('bento-dark'));
     if (!this._reportLocaleNeedsRefresh || this._reportDownloadPending || this._reportDisposed) return;
     const root = this._sentenceReportDialogRoot();
     if (!root) return;
@@ -4154,6 +4157,15 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 }
 
 /* Tips banner */
+/* Bridge the card's already resolved palette across the dialog shadow boundary.
+   Inherited Bento values keep HA themes and dark fallbacks without a var cycle. */
+[data-ha-tools-export] {
+  --card-background-color: var(--bento-card);
+  --secondary-background-color: var(--bento-bg-2);
+  --primary-text-color: var(--bento-text);
+  --secondary-text-color: var(--bento-text-secondary);
+  --divider-color: var(--bento-border);
+}
 .tip-banner {
   background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(59,130,246,0.03));
   border: 1.5px solid rgba(59,130,246,0.2);
