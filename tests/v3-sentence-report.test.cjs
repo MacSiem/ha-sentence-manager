@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { JSDOM, VirtualConsole } = require('jsdom');
-const source = fs.readFileSync('custom_components/ha_sentence_manager/www/ha-sentence-manager.js', 'utf8');
+const source = fs.readFileSync(process.env.SENTENCE_REPORT_SOURCE_PATH || 'custom_components/ha_sentence_manager/www/ha-sentence-manager.js', 'utf8');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const assist = (status = 'unconfirmed') => ({ status, success: status === 'success', input: 'SYNTHETIC_PRIVATE_PHRASE', response: '', responseType: status === 'success' ? 'action_done' : 'unknown', data: status === 'success' ? { success: [], failed: [] } : null });
@@ -37,7 +37,7 @@ async function fixture(language = 'en') {
     }
     if (request.type === 'conversation/process') return null;
     throw new Error('Unexpected request');
-  };
+  } };
   card.hass = hass;
   await flush();
   const report = () => card.shadowRoot.querySelector('[data-ha-tools-export]')?.shadowRoot;
