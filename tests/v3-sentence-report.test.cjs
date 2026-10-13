@@ -346,6 +346,23 @@ test('Escape restores report opener focus; detach removes dialog and transport l
 });
 
 // Owner supplement after reviewing the child's runtime source; not child tests-first evidence.
+test('an open report follows theme changes without replacing its draft, preview or focused field', async () => {
+  const f = await fixture();
+  try {
+    f.seed(); await f.open();
+    const root = f.report(), filename = f.field('filename'), preview = f.field('preview').textContent;
+    filename.value = 'wyniki-żółć.json'; filename.focus(); filename.setSelectionRange(1, 3);
+    f.card.hass = { ...f.hass, themes: { darkMode: true } };
+    assert.equal(root.host.classList.contains('bento-dark'), true);
+    assert.equal(f.report(), root); assert.equal(f.field('filename'), filename);
+    assert.equal(root.activeElement, filename); assert.equal(filename.selectionStart, 1); assert.equal(filename.selectionEnd, 3);
+    assert.equal(filename.value, 'wyniki-żółć.json'); assert.equal(f.field('preview').textContent, preview);
+    f.card.hass = { ...f.hass, themes: { darkMode: false } };
+    assert.equal(root.host.classList.contains('bento-dark'), false);
+    assert.equal(f.report(), root); assert.equal(root.activeElement, filename);
+  } finally { f.close(); }
+});
+
 for (const change of ['browser-offline', 'inactive-user']) test(`${change} consumes preview and prevents Save even with a connected socket`, async () => {
   const f = await fixture();
   try {
