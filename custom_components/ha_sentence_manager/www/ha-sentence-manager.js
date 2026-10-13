@@ -40,6 +40,312 @@ function createUiV3({ language = 'en' } = {}) {
 }
 // END HA TOOLS UI V3
 
+// BEGIN HA TOOLS EXPORT V3 source-sha256=1f9e9c5444ec3b6de44eec136f14ae9e7d89dae1002650b33f746ab9633982f1
+/**
+ * W6 export dialog. Pure ES module; vendor this factory INSIDE each consumer's
+ * own IIFE (remove only the `export` keyword). Never attach it to window.
+ * Construction is inert. open() appends only its own container to root.
+ *
+ * Required dependency injection:
+ * root: Element/ShadowRoot; getLanguage(): 'pl'|'en'; createUiV3: existing W4 factory.
+ * getContext(): {role,userId,connectionId,datasetId,revision,connected,canExport,
+ *                sourceConfirmed}. Identities/revision are nonempty scalar values;
+ * bump revision monotonically for source/filter/selection/identity changes,
+ * including a restored source; never reuse an old revision. Never return tokens or data.
+ * policy: {id,allowlistedFields:string[],neverInclude:[tokens,users,addresses,raw_config]}.
+ * formats: explicit subset of ['json','csv','txt']; defaults must be explicit valid choices.
+ * buildPayload({context,draft,policy,signal}): read-only, Promise or sync result:
+ * {serialized:string,confirmed:true,sourceConfirmed:true,status:'success'|'partial',
+ *  included:string[],excluded:string[],sourceLimit:string}.
+ * Included/Excluded/sourceLimit describe the REVIEWED CONSUMER policy and actual
+ * source limitations in the current language. The consumer MUST explicitly select
+ * allowed fields, exclude tokens/users/addresses/raw configuration under EVERY
+ * private opt-in, and sanitize CSV formula cells where applicable. A generic
+ * recursive export/redactor of arbitrary raw state/config is NOT a valid consumer.
+ * This factory cannot inspect or truthfully sanitize an unknown arbitrary schema.
+ * For partial reports the consumer also encodes the partial status, inclusion
+ * scope and source limitations IN its allowlisted file schema, not only UI text.
+ * performDownload({serialized,blob,filename,format,context,signal}): explicit Save
+ * only. Return {outcome:'initiated'|'saved'|'unknown'}; 'saved' requires actual
+ * adapter confirmation, never infer disk persistence from an anchor click.
+ * Optional clock(): monotonic milliseconds; setTimer(fn,ms), clearTimer(handle).
+ *
+ * Returned API: open({opener}), cancel(), contextChanged(), destroy(). Every open
+ * resets private consent. contextChanged() discards bytes/consent immediately;
+ * owner also calls cancel/destroy on disconnect. Save ALWAYS rechecks context.
+ * One preview on open, explicit Refresh thereafter; bounded 10s, no automatic
+ * retries/downloads/persistence. AbortSignal is advisory; late results are ignored.
+ */
+function createExportDialog(options) {
+  const { root, getContext, getLanguage, createUiV3, buildPayload, performDownload,
+    clock = () => globalThis.performance.now(), setTimer = (fn, ms) => globalThis.setTimeout(fn, ms),
+    clearTimer = id => globalThis.clearTimeout(id), defaultFormat, defaultFilename } = options || {};
+  const allowedFormats = ['json', 'csv', 'txt', 'yaml'];
+  const excludedCategories = ['tokens', 'users', 'addresses', 'raw_config'];
+  const strings = value => Array.isArray(value) && value.length > 0 && value.every(v => typeof v === 'string' && v.trim());
+  if (!root?.append || !root.ownerDocument || [getContext, getLanguage, createUiV3, buildPayload, performDownload, clock, setTimer, clearTimer].some(fn => typeof fn !== 'function')) {
+    throw new TypeError('root and injected getContext/getLanguage/createUiV3/buildPayload/performDownload/clock/timers are required');
+  }
+  const suppliedPolicy = options.policy;
+  if (!suppliedPolicy || typeof suppliedPolicy.id !== 'string' || !suppliedPolicy.id.trim() || !strings(suppliedPolicy.allowlistedFields) || !strings(suppliedPolicy.neverInclude) || excludedCategories.some(key => !suppliedPolicy.neverInclude.includes(key))) {
+    throw new TypeError('Explicit reviewed consumer policy with allowlistedFields and neverInclude is required');
+  }
+  const policy = Object.freeze({ id: suppliedPolicy.id, allowlistedFields: Object.freeze([...suppliedPolicy.allowlistedFields]), neverInclude: Object.freeze([...suppliedPolicy.neverInclude]) });
+  if (!strings(options.formats) || options.formats.some(f => !allowedFormats.includes(f)) || new Set(options.formats).size !== options.formats.length || !options.formats.includes(defaultFormat) || typeof defaultFilename !== 'string') {
+    throw new TypeError('Explicit formats/defaultFormat/defaultFilename are required');
+  }
+  const formats = Object.freeze([...options.formats]);
+  const doc = root.ownerDocument;
+  const mime = { json: 'application/json;charset=utf-8', csv: 'text/csv;charset=utf-8', txt: 'text/plain;charset=utf-8', yaml: 'application/yaml;charset=utf-8' };
+  const copy = {
+    en: { title: 'Export', filename: 'Filename', format: 'Format', private: 'Include reviewed private fields (this export only)', included: 'Included in the file', excluded: 'Excluded from the file', source: 'Source and limits', preview: 'Exact file content', save: 'Save', refresh: 'Refresh preview', cancel: 'Cancel', busy: 'Building preview… Save waits for confirmed bytes.', changed: 'Choices changed. Refresh preview before Save.', context: 'Source or access changed. Review the source and refresh preview.', unavailable: 'Source unavailable or unconfirmed. Reconnect or confirm the source, then refresh.', invalidFormat: 'Choose an allowed format: JSON, CSV, TXT or YAML as offered.', invalidName: 'Use a basename of 1–128 characters: no paths, control characters, reserved names or leading/trailing spaces.', extension: 'Filename must end with the selected extension. Edit the filename, then refresh.', timeout: 'Preview exceeded 10 seconds. Check the source and explicitly refresh.', buildError: 'Could not build a confirmed preview. Check the source and refresh.', unconfirmed: 'Bytes or source metadata are unconfirmed. Confirm the source and refresh.', noData: 'No confirmed file content. Select available data and refresh.', saving: 'Handing off the confirmed preview… Wait for the adapter result.', initiated: 'Download initiated. Saving to the filesystem is not confirmed. Refresh only for a new export intent.', saved: 'Save confirmed by the download adapter.', unknown: 'Download result unconfirmed. Check the previous attempt before explicitly refreshing for a new export intent.' },
+    pl: { title: 'Eksport', filename: 'Nazwa pliku', format: 'Format', private: 'Dołącz sprawdzone pola prywatne (tylko ten eksport)', included: 'W pliku jest', excluded: 'W pliku nie ma', source: 'Źródło i ograniczenia', preview: 'Dokładna zawartość pliku', save: 'Zapisz', refresh: 'Odśwież podgląd', cancel: 'Anuluj', busy: 'Przygotowywanie podglądu… Zapis wymaga potwierdzonej zawartości.', changed: 'Wybór zmieniony. Odśwież podgląd przed zapisem.', context: 'Źródło lub uprawnienia zmienione. Sprawdź źródło i odśwież podgląd.', unavailable: 'Źródło niedostępne lub niepotwierdzone. Połącz lub potwierdź źródło i odśwież.', invalidFormat: 'Wybierz dostępny format: JSON, CSV, TXT lub YAML z listy.', invalidName: 'Użyj nazwy pliku o długości 1–128 znaków: bez ścieżek, znaków sterujących, nazw zastrzeżonych i skrajnych spacji.', extension: 'Nazwa pliku musi mieć rozszerzenie wybranego formatu. Popraw nazwę i odśwież.', timeout: 'Podgląd przekroczył 10 sekund. Sprawdź źródło i jawnie odśwież.', buildError: 'Nie udało się przygotować potwierdzonego podglądu. Sprawdź źródło i odśwież.', unconfirmed: 'Zawartość lub opis źródła niepotwierdzony. Potwierdź źródło i odśwież.', noData: 'Brak potwierdzonej zawartości pliku. Wybierz dostępne dane i odśwież.', saving: 'Przekazywanie potwierdzonego podglądu… Poczekaj na wynik zapisu.', initiated: 'Pobieranie rozpoczęte. Zapis na dysku nie jest potwierdzony. Odśwież tylko dla nowej próby eksportu.', saved: 'Adapter pobierania potwierdził zapis.', unknown: 'Wynik pobierania niepotwierdzony. Sprawdź poprzednią próbę przed jawnym odświeżeniem dla nowego eksportu.' },
+  };
+  const css = `
+[data-ha-tools-export] { container-type:inline-size;min-width:0;max-width:100%;color:var(--primary-text-color,inherit);font:inherit; }
+[data-ha-tools-export] * { box-sizing:border-box; }
+[data-ha-tools-export] [role=dialog] { width:100%;min-width:0;border:1px solid var(--divider-color,#aaa);border-radius:12px;background:var(--card-background-color,#fff);padding:16px; }
+[data-ha-tools-export] h2,[data-ha-tools-export] h3,[data-ha-tools-export] p,[data-ha-tools-export] li { overflow-wrap:anywhere;white-space:normal; }
+[data-ha-tools-export] h2 { margin:0 0 12px;font-size:1.25em; }
+[data-ha-tools-export] h3 { margin:12px 0 6px;font-size:1em; }
+[data-ha-tools-export] .ht-export-fields { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px; }
+[data-ha-tools-export] label { display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere; }
+[data-ha-tools-export] .ht-export-private { flex-direction:row;align-items:center;min-height:44px;margin-top:12px; }
+[data-ha-tools-export] input:not([type=checkbox]),[data-ha-tools-export] select,[data-ha-tools-export] button { font:inherit;min-width:44px;min-height:44px;max-width:100%; }
+[data-ha-tools-export] input:not([type=checkbox]),[data-ha-tools-export] select { width:100%;color:inherit;background:var(--secondary-background-color,var(--card-background-color,#f5f5f5));border:1px solid var(--divider-color,#aaa);border-radius:6px;padding:8px; }
+[data-ha-tools-export] input[type=checkbox] { width:24px;height:24px;flex:none;margin:10px; }
+[data-ha-tools-export] button { padding:8px 12px;white-space:normal;overflow-wrap:anywhere;cursor:pointer;border:1px solid var(--divider-color,#aaa);border-radius:6px;color:inherit;background:var(--secondary-background-color,var(--card-background-color,#f5f5f5)); }
+[data-ha-tools-export] :focus-visible { outline:3px solid var(--primary-color,#1769aa);outline-offset:2px; }
+[data-ha-tools-export] button:disabled { cursor:default;opacity:.6; }
+[data-ha-tools-export] .ht-export-actions { display:flex;flex-wrap:wrap;gap:8px;margin-top:16px; }
+[data-ha-tools-export] pre { max-width:100%;min-width:0;max-height:320px;overflow:auto;white-space:pre;margin:0;padding:12px;border:1px solid var(--divider-color,#aaa);background:var(--secondary-background-color,var(--card-background-color,#f5f5f5)); }
+[data-ha-tools-export] ul { padding-inline-start:22px;margin:0; }
+@container (max-width:499px) { [data-ha-tools-export] .ht-export-fields { grid-template-columns:minmax(0,1fr); } }
+@container (max-width:319px) { [data-ha-tools-export] [role=dialog] { padding:10px; } [data-ha-tools-export] .ht-export-actions button { flex:1 1 100%; } }
+`;
+  let container, nodes, L, ui, opener, alive = false, destroyed = false, serial = 0;
+  let pending = null, handoff = null, ready = null, observed = null;
+  const listeners = [];
+  const on = (target, event, handler, capture = false) => {
+    target.addEventListener(event, handler, capture);
+    listeners.push(() => target.removeEventListener(event, handler, capture));
+  };
+  const contextKeys = ['role', 'userId', 'connectionId', 'datasetId', 'revision'];
+  function readContext() {
+    try {
+      const value = getContext();
+      if (!value || contextKeys.some(k => !['string', 'number'].includes(typeof value[k]) || String(value[k]).trim() === '' || (typeof value[k] === 'number' && !Number.isFinite(value[k])))) return null;
+      return Object.freeze(Object.fromEntries([...contextKeys, 'connected', 'canExport', 'sourceConfirmed'].map(k => [k, value[k]])));
+    } catch { return null; }
+  }
+  const same = (a, b) => !!a && !!b && [...contextKeys, 'connected', 'canExport', 'sourceConfirmed'].every(k => a[k] === b[k]);
+  const available = c => !!c && c.connected === true && c.canExport === true && c.sourceConfirmed === true;
+  const draft = () => Object.freeze({ filename: nodes.filename.value, format: nodes.format.value, includePrivate: nodes.private.checked });
+  const sameDraft = (a, b) => a.filename === b.filename && a.format === b.format && a.includePrivate === b.includePrivate;
+  function validation(value) {
+    if (!formats.includes(value.format)) return 'invalidFormat';
+    const name = value.filename;
+    if (!name || [...name].length > 128 || name !== name.trim() || /[\p{Cc}\p{Cf}/\\<>:"|?*]/u.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i.test(name)) return 'invalidName';
+    if (!name.endsWith(`.${value.format}`) || name.length <= value.format.length + 1) return 'extension';
+    return null;
+  }
+  function status(code, message) {
+    if (!alive) return;
+    const result = ui.status(code); // exact existing W4 labels/icons/codes
+    nodes.status.className = `ht-result-state ht-result-state--${result.code}`;
+    nodes.status.dataset.resultState = result.code;
+    nodes.status.replaceChildren();
+    const icon = doc.createElement('span'); icon.setAttribute('aria-hidden', 'true'); icon.textContent = result.icon;
+    nodes.status.append(icon, doc.createTextNode(` ${result.label}`));
+    nodes.message.textContent = ` ${L[message]}`;
+    nodes.save.disabled = !ready || !!pending || !!handoff;
+    nodes.refresh.disabled = !!pending || !!handoff;
+  }
+  function stop(job) {
+    if (!job) return;
+    if (job.timer !== null) clearTimer(job.timer);
+    job.timer = null; job.controller.abort();
+  }
+  function discard(resetPrivate = false) {
+    serial++; stop(pending); pending = null; ready = null;
+    if (alive) {
+      nodes.preview.textContent = ''; nodes.included.replaceChildren(); nodes.excluded.replaceChildren(); nodes['source-limit'].textContent = '';
+      if (resetPrivate) nodes.private.checked = false;
+    }
+  }
+  function contextChanged() {
+    if (!alive) return;
+    observed = readContext(); discard(true);
+    // Once a handoff began we cannot retract a browser download. Ignore its late
+    // callback and retain the prohibition on a second write until it settles.
+    if (handoff) handoff.controller.abort();
+    status(root.isConnected && available(observed) ? 'unconfirmed' : 'no_data', 'context');
+  }
+  function validContext(original) {
+    const current = readContext();
+    if (!root.isConnected || !same(original, current) || !available(current)) { contextChanged(); return false; }
+    return true;
+  }
+  function changeDraft() {
+    if (!alive) return;
+    if (!same(observed, readContext())) { contextChanged(); return; }
+    discard();
+    const error = validation(draft()); status(error ? 'error' : 'not_checked', error || 'changed');
+  }
+  function fillList(node, items) {
+    node.replaceChildren(...items.map(text => { const li = doc.createElement('li'); li.textContent = text; return li; }));
+  }
+  async function refresh() {
+    if (!alive || pending || handoff) return;
+    const current = readContext();
+    if (!same(observed, current)) { observed = current; discard(true); }
+    const value = draft(), error = validation(value);
+    discard();
+    if (error) { status('error', error); return; }
+    if (!root.isConnected || !available(current)) { status(!root.isConnected || current?.connected === false ? 'no_data' : 'unconfirmed', 'unavailable'); return; }
+    observed = current;
+    const job = { id: serial, context: current, draft: value, started: clock(), controller: new globalThis.AbortController(), timer: null };
+    pending = job; status('not_checked', 'busy');
+    const timeout = () => {
+      if (!alive || pending !== job) return;
+      discard(); status('unconfirmed', 'timeout');
+    };
+    job.timer = setTimer(timeout, 10000);
+    try {
+      const payload = await buildPayload(Object.freeze({ context: current, draft: value, policy, signal: job.controller.signal }));
+      if (!alive || pending !== job || job.id !== serial) return;
+      if (clock() - job.started >= 10000) { timeout(); return; }
+      if (!validContext(current)) return;
+      clearTimer(job.timer); job.timer = null;
+      if (!sameDraft(value, draft())) { changeDraft(); return; }
+      const { serialized, confirmed, sourceConfirmed, status: resultState, included, excluded, sourceLimit } = payload || {};
+      if (resultState === 'no_data' || serialized === '') { pending = null; status('no_data', 'noData'); return; }
+      if (confirmed !== true || sourceConfirmed !== true || !['success', 'partial'].includes(resultState) || typeof serialized !== 'string' || !strings(included) || !strings(excluded) || typeof sourceLimit !== 'string' || !sourceLimit.trim()) {
+        pending = null; status('unconfirmed', 'unconfirmed'); return;
+      }
+      // Freeze the only serialized bytes and build the only Blob NOW; Save never
+      // re-runs serialization or builds a second payload from potentially newer data.
+      ready = Object.freeze({ serialized, blob: new globalThis.Blob([serialized], { type: mime[value.format] }), context: current, draft: value });
+      nodes.preview.textContent = ready.serialized;
+      fillList(nodes.included, [...included]); fillList(nodes.excluded, [...excluded]);
+      nodes['source-limit'].textContent = sourceLimit;
+      pending = null; status(resultState, 'changed'); nodes.message.textContent = '';
+    } catch {
+      if (!alive || pending !== job || job.id !== serial) return;
+      if (clock() - job.started >= 10000) { timeout(); return; }
+      if (!validContext(current)) return;
+      discard(); status('error', 'buildError');
+    }
+  }
+  async function save() {
+    if (!alive || !ready || pending || handoff) return;
+    if (!validContext(ready.context)) return;
+    const value = draft(), error = validation(value);
+    if (error || !sameDraft(value, ready.draft) || nodes.preview.textContent !== ready.serialized) {
+      discard(); status(error ? 'error' : 'unconfirmed', error || 'changed'); return;
+    }
+    const snapshot = ready; ready = null; // consume intent BEFORE invoking adapter
+    const job = { id: serial, context: snapshot.context, controller: new globalThis.AbortController() };
+    handoff = job; status('unconfirmed', 'saving');
+    // choices cannot initiate another preview while the adapter result is unknown
+    for (const key of ['filename', 'format', 'private']) nodes[key].disabled = true;
+    try {
+      const result = await performDownload(Object.freeze({ serialized: snapshot.serialized, blob: snapshot.blob, filename: snapshot.draft.filename, format: snapshot.draft.format, context: snapshot.context, signal: job.controller.signal }));
+      if (!alive || handoff !== job || job.id !== serial || !validContext(job.context)) return;
+      status(result?.outcome === 'saved' ? 'success' : 'unconfirmed', result?.outcome === 'saved' ? 'saved' : result?.outcome === 'initiated' ? 'initiated' : 'unknown');
+    } catch {
+      if (alive && handoff === job && job.id === serial && validContext(job.context)) status('unconfirmed', 'unknown');
+    } finally {
+      if (handoff === job) {
+        handoff = null;
+        if (alive) {
+          for (const key of ['filename', 'format', 'private']) nodes[key].disabled = false;
+          nodes.refresh.disabled = false; nodes.save.disabled = true;
+          if (job.id !== serial) status('unconfirmed', 'unknown');
+        }
+      }
+    }
+  }
+  function focusable() {
+    return Array.from(nodes.dialog.querySelectorAll('input,select,button,[tabindex="0"]')).filter(el => !el.disabled);
+  }
+  function keydown(event) {
+    if (!alive) return;
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); }
+    if (event.key === 'Tab') {
+      const items = focusable(), first = items[0], last = items.at(-1);
+      const active = nodes.dialog.getRootNode().activeElement || root.activeElement || doc.activeElement;
+      if (event.shiftKey && (active === first || !nodes.dialog.contains(active))) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (active === last || !nodes.dialog.contains(active))) { event.preventDefault(); first?.focus(); }
+    }
+  }
+  function cancel() {
+    if (!alive) return;
+    discard(true); if (handoff) handoff.controller.abort();
+    alive = false; listeners.splice(0).forEach(off => off()); container.remove();
+    container = null; nodes = null; observed = null;
+    // A pending handoff remains latched until settled: reopening never repeats it.
+    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus();
+    opener = null;
+  }
+  function open({ opener: target } = {}) {
+    if (destroyed) throw new Error('Export dialog destroyed');
+    if (alive) return;
+    const language = String(getLanguage());
+    L = copy[language.startsWith('pl') ? 'pl' : 'en'];
+    ui = createUiV3({ language });
+    opener = target || root.activeElement || doc.activeElement;
+    container = doc.createElement('div'); container.setAttribute('data-ha-tools-export', '');
+    // The own shadow boundary contains CSS and local IDs; adjacent W4 status
+    // elements retain their existing styling. Consumers can query this open root.
+    const shadow = container.attachShadow({ mode: 'open' });
+    if (root.host?.classList.contains('bento-dark')) container.classList.add('bento-dark');
+    const style = doc.createElement('style'); style.textContent = ':host{display:block;min-width:0;max-width:100%;}' + css + '\n' + ui.css;
+    shadow.append(style);
+    const shell = doc.createElement('div'); shell.setAttribute('data-ha-tools-export', ''); shadow.append(shell);
+    nodes = {};
+    const make = (tag, key, parent, text) => { const node = doc.createElement(tag); if (key) { node.dataset.export = key; nodes[key] = node; } if (text) node.textContent = text; parent.append(node); return node; };
+    const dialog = make('section', 'dialog', shell); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+    const title = make('h2', 'title', dialog, L.title);
+    // Locally unique IDs, no random or global counters/persistent state.
+    const prefix = `ht-export-${String(clock()).replace(/\W/g, '')}`;
+    title.id = prefix + '-title'; dialog.setAttribute('aria-labelledby', title.id);
+    const fields = make('div', null, dialog); fields.className = 'ht-export-fields';
+    const filenameLabel = make('label', null, fields); make('span', null, filenameLabel, L.filename);
+    const filename = make('input', 'filename', filenameLabel); filename.type = 'text'; filename.value = defaultFilename; filename.autocomplete = 'off';
+    const formatLabel = make('label', null, fields); make('span', null, formatLabel, L.format);
+    const format = make('select', 'format', formatLabel);
+    formats.forEach(value => { const option = make('option', null, format, value.toUpperCase()); option.value = value; }); format.value = defaultFormat;
+    const privateLabel = make('label', null, dialog); privateLabel.className = 'ht-export-private';
+    const privateInput = make('input', 'private', privateLabel); privateInput.type = 'checkbox'; privateInput.checked = false; make('span', null, privateLabel, L.private);
+    const statusLine = make('p', null, dialog); statusLine.setAttribute('role', 'status'); statusLine.setAttribute('aria-live', 'polite');
+    make('span', 'status', statusLine); make('span', 'message', statusLine);
+    for (const key of ['included', 'excluded']) { make('h3', null, dialog, L[key]); make('ul', key, dialog); }
+    make('h3', null, dialog, L.source); make('p', 'source-limit', dialog);
+    const previewHeading = make('h3', null, dialog, L.preview); previewHeading.id = prefix + '-preview';
+    const preview = make('pre', 'preview', dialog); preview.tabIndex = 0; preview.setAttribute('aria-labelledby', previewHeading.id);
+    const actions = make('div', null, dialog); actions.className = 'ht-export-actions';
+    for (const key of ['refresh', 'save', 'cancel']) { const button = make('button', key, actions, L[key]); button.type = 'button'; }
+    root.append(container); alive = true; observed = readContext();
+    for (const [key, event] of [['filename', 'input'], ['format', 'change'], ['private', 'change']]) on(nodes[key], event, changeDraft);
+    on(nodes.refresh, 'click', refresh); on(nodes.save, 'click', save); on(nodes.cancel, 'click', cancel);
+    on(doc, 'keydown', keydown, true);
+    on(doc, 'focusin', event => {
+      if (alive && !event.composedPath().includes(nodes.dialog)) focusable()[0]?.focus();
+    }, true);
+    // The consumer supplies exact opener even when its shadow DOM hides activeElement.
+    filename.focus();
+    if (handoff) {
+      for (const key of ['filename', 'format', 'private']) nodes[key].disabled = true;
+      preview.focus();
+      status('unconfirmed', 'saving');
+    } else { status('not_checked', 'changed'); void refresh(); }
+  }
+  function destroy() { cancel(); destroyed = true; }
+  return Object.freeze({ open, cancel, contextChanged, destroy });
+}
+// END HA TOOLS EXPORT V3
+
 // XSS protection helper (reuse global from panel, fallback for standalone)
 const _asText = (s) => String(s ?? '');
 const _escBase = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -678,6 +984,23 @@ class HASentenceManager extends HTMLElement {
     this._importDraft = '';
     this._importResult = null;
     this._importBusy = false;
+    // W6 state belongs to this card/session; no global or persistent report cache.
+    this._reportRevision = 0;
+    this._reportSourceEpoch = 0;
+    this._reportObserved = null;
+    this._reportContext = null;
+    this._reportSnapshot = null;
+    this._reportConnectionRef = undefined;
+    this._reportConnectionSerial = 0;
+    this._reportConnectionOffline = false;
+    this._reportConnectionWasOnline = undefined;
+    this._reportConnectionListeners = [];
+    this._reportExport = null;
+    this._reportExportLanguage = null;
+    this._reportLocaleNeedsRefresh = false;
+    this._reportDownloadPending = false;
+    this._reportLocaleTimer = null;
+    this._reportDownloadUrls = new Map();
     // --- Throttle fields ---
     this._lastRenderTime = 0;
     this._renderScheduled = false;
@@ -721,6 +1044,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   set hass(hass) {
+    if (hass) this._reportDisposed = false;
     const previousLanguage = this._lang;
     try {
       var _bg = (getComputedStyle(this).getPropertyValue('--card-background-color') || getComputedStyle(this).getPropertyValue('--primary-background-color') || '').trim();
@@ -743,7 +1067,8 @@ class HASentenceManager extends HTMLElement {
     this._sentenceUserId = hass?.user?.id;
     this._sentenceAdmin = hass?.user?.is_admin === true;
     this._hass = hass;
-    if (!hass) { this.shadowRoot?.replaceChildren(); return; }
+    this._syncSentenceReportState();
+    if (!hass) { this._destroySentenceReport(); this.shadowRoot?.replaceChildren(); return; }
     if (!this._sentencesLoaded) {
       // Load persisted sentences from the integration once HA is connected.
       this._sentencesLoaded = true;
@@ -765,6 +1090,8 @@ class HASentenceManager extends HTMLElement {
     }
     if (permissionsChanged || identityChanged) this.render();
     else if (previousLanguage !== this._lang) this._renderLocalePreservingDrafts();
+    this._updateSentenceReportAvailability();
+    this._refreshSentenceReportLocale();
     // Only re-render on hass update if entities actually changed
     // Sentence Manager has no entity dependencies — skip re-render on hass updates
     // Re-rendering is handled explicitly by user actions (tab switch, save, etc.)
@@ -1177,6 +1504,7 @@ class HASentenceManager extends HTMLElement {
   async _testSentenceHA(text) {
     if (!this._hass || typeof text !== 'string' || !text.trim() || this._testLoading) return;
     const epoch = this._dataEpoch;
+    const reportEpoch = this._reportSourceEpoch;
     this._testDraft = text;
     this._testLoading = true;
     this._testResultHA = null;
@@ -1184,7 +1512,8 @@ class HASentenceManager extends HTMLElement {
     try {
       const lang = this.config.language || this._hass.config?.language || 'en';
       const result = await this._hass.callWS({ type: 'conversation/process', text: text.trim(), language: lang, agent_id: 'conversation.home_assistant' });
-      if (epoch !== this._dataEpoch || !this._hass) return;
+      this._syncSentenceReportState();
+      if (epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch || !this._hass) return;
       const response = result?.response;
       const data = response?.data;
       const responseType = typeof response?.response_type === 'string' ? response.response_type : 'unknown';
@@ -1204,7 +1533,8 @@ class HASentenceManager extends HTMLElement {
         data: data && typeof data === 'object' && !Array.isArray(data) ? data : null,
       };
     } catch (e) {
-      if (epoch !== this._dataEpoch || !this._hass) return;
+      this._syncSentenceReportState();
+      if (epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch || !this._hass) return;
       this._testResultHA = { status: 'error', success: false, input: text, error: this._lang === 'pl' ? 'Nie otrzymano prawidłowej odpowiedzi z HA.' : 'No valid response was received from HA.' };
     }
     this._testLoading = false;
@@ -1268,10 +1598,300 @@ class HASentenceManager extends HTMLElement {
     return yaml;
   }
 
+  async _copyExportYaml() {
+    const textarea = this.shadowRoot.querySelector('#yaml-output');
+    if (!textarea) return;
+    const epoch = this._dataEpoch;
+    const text = textarea.value;
+    try {
+      if (typeof navigator.clipboard?.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+      } else {
+        textarea.focus();
+        textarea.select();
+        if (typeof document.execCommand !== 'function' || document.execCommand('copy') !== true) {
+          throw new Error('Clipboard copy was not confirmed');
+        }
+      }
+      if (epoch !== this._dataEpoch) return;
+      this.showNotification(this._lang === 'pl' ? 'YAML skopiowany do schowka' : 'YAML copied to clipboard', 'success');
+    } catch (_) {
+      if (epoch !== this._dataEpoch) return;
+      this.showNotification(this._lang === 'pl'
+        ? 'Nie można skopiować do schowka. Zaznacz i skopiuj widoczny YAML.'
+        : 'Could not copy to the clipboard. Select and copy the displayed YAML.', 'error');
+    }
+  }
+
+  _sentenceReportModel() {
+    // Never clone/spread raw results: they include phrases, payloads and identities.
+    const record = value => !!value && typeof value === 'object' && !Array.isArray(value);
+    const count = value => Number.isSafeInteger(value) && value >= 0;
+    const states = ['success', 'partial', 'unconfirmed', 'error'];
+    const reasons = ['invalid_payload', 'conflict', 'create_failed', 'unauthorized', 'unconfirmed'];
+    let imported = { available: false }, assist = { available: false };
+    const input = this._importResult;
+    if (this._canManageSentences() && record(input) && input.epoch === this._dataEpoch &&
+        states.includes(input.status) && count(input.total) && count(input.created) && input.created <= input.total &&
+        Array.isArray(input.failed) && input.failed.length <= input.total &&
+        ['parseFailed', 'listUnavailable', 'reloadFailed'].every(key => input[key] === undefined || typeof input[key] === 'boolean')) {
+      const seen = new Set();
+      const validRows = input.failed.every(row => {
+        if (!record(row) || !Number.isSafeInteger(row.row) || row.row < 1 || row.row > input.total || seen.has(row.row)) return false;
+        seen.add(row.row); return true;
+      });
+      if (validRows && (input.total > 0 || input.parseFailed === true)) {
+        const failed = input.failed.map(row => ({ row: row.row, reason: reasons.includes(row.code) ? row.code : 'unconfirmed' }));
+        const flags = input.parseFailed === true || input.listUnavailable === true || input.reloadFailed === true;
+        const inconsistentSuccess = input.status === 'success' && (flags || failed.length || input.created !== input.total || input.listUnavailable === undefined || input.reloadFailed === undefined);
+        imported = {
+          available: true, status: inconsistentSuccess ? 'unconfirmed' : input.status,
+          attempted: input.total, created: input.created, failed,
+          parse_failed: input.parseFailed === true, parse_status: input.parseFailed === true ? 'error' : 'success',
+          list_read_status: input.listUnavailable === undefined ? 'not_checked' : input.listUnavailable ? 'unconfirmed' : 'success',
+          reload_status: input.reloadFailed === undefined ? 'not_checked' : input.reloadFailed ? 'unconfirmed' : 'success',
+          list_unavailable: input.listUnavailable === true, reload_failed: input.reloadFailed === true,
+        };
+      }
+    }
+    const result = this._testResultHA;
+    if (record(result) && states.includes(result.status) && typeof result.input === 'string' &&
+        typeof result.success === 'boolean' && (result.response === undefined || typeof result.response === 'string')) {
+      const type = ['action_done', 'query_answer', 'error'].includes(result.responseType) ? result.responseType : 'unknown';
+      let state = result.status;
+      if (state === 'success') {
+        const data = result.data;
+        const target = value => record(value) && typeof value.name === 'string' && typeof value.type === 'string';
+        if (result.success !== true || !['action_done', 'query_answer'].includes(type) || !record(data) ||
+            !Array.isArray(data.success) || !Array.isArray(data.failed) || data.failed.length || !data.success.every(target)) state = 'unconfirmed';
+      }
+      assist = { available: true, status: state, response_type: type };
+    }
+    if (!imported.available && !assist.available) return null;
+    const activeStates = [imported, assist].filter(section => section.available).map(section => section.status);
+    const status = ['unconfirmed', 'error', 'partial', 'success'].find(state => activeStates.includes(state));
+    const limitations = ['current_session_only', 'latest_results_only', 'not_sentence_backup', 'no_private_fields'];
+    if (!imported.available) limitations.push('import_result_unavailable');
+    if (!assist.available) limitations.push('assist_result_unavailable');
+    if (assist.available && ['unconfirmed', 'partial', 'error'].includes(assist.status)) limitations.push('assist_may_have_executed');
+    return { schema_version: 1, report_type: 'sentence_operation_results', coverage: 'current_session_latest_results',
+      status, limitations, import: imported, assist };
+  }
+
+  _dropSentenceReportResults() {
+    this._reportSourceEpoch++;
+    this._importResult = null; this._importBusy = false;
+    this._testResultHA = null; this._testLoading = false;
+  }
+
+  _bindSentenceReportConnection() {
+    const connection = this._hass?.connection || null;
+    if (connection === this._reportConnectionRef) return;
+    for (const remove of this._reportConnectionListeners) remove();
+    this._reportConnectionListeners = [];
+    if (this._reportConnectionRef !== undefined) this._dropSentenceReportResults();
+    this._reportConnectionRef = connection; this._reportConnectionSerial++;
+    this._reportConnectionOffline = false;
+    if (connection && typeof connection.addEventListener === 'function' && typeof connection.removeEventListener === 'function') {
+      for (const event of ['disconnected', 'ready']) {
+        const listener = () => {
+          if (connection !== this._reportConnectionRef) return;
+          this._reportConnectionOffline = event === 'disconnected';
+          this._syncSentenceReportState();
+          this.render();
+        };
+        connection.addEventListener(event, listener);
+        this._reportConnectionListeners.push(() => connection.removeEventListener(event, listener));
+      }
+    }
+  }
+
+  _syncSentenceReportState() {
+    if (this._reportSyncing || this._reportDisposed) return;
+    this._reportSyncing = true;
+    try {
+      this._bindSentenceReportConnection();
+      const connection = this._reportConnectionRef;
+      const connected = !!this._hass && !!connection && !this._reportConnectionOffline && connection.connected !== false &&
+        (connection.connected === true || connection.socket?.readyState === 1) &&
+        (connection.socket?.readyState === undefined || connection.socket.readyState === 1);
+      const rawUser = this._hass?.user?.id;
+      const hasUser = typeof rawUser === 'string' && rawUser.trim().length > 0;
+      const userId = hasUser ? rawUser : 'missing-user';
+      const role = this._hass?.user?.is_admin === true ? 'admin' : 'member';
+      const old = this._reportObserved;
+      if ((this._reportConnectionWasOnline === true && !connected) ||
+          (old && (old.userId !== userId || old.role !== role))) this._dropSentenceReportResults();
+      this._reportConnectionWasOnline = connected;
+      const snapshot = this._sentenceReportModel();
+      const serialized = snapshot ? JSON.stringify(snapshot, null, 2) + '\n' : '';
+      const observed = { connected, userId, hasUser, role, connectionId: this._reportConnectionSerial,
+        sourceEpoch: this._reportSourceEpoch, dataEpoch: this._dataEpoch, language: this._lang,
+        configRef: this.config, filterLanguage: this._currentLanguage, commandLanguage: this.config?.language || this._hass?.config?.language,
+        importRef: this._importResult, assistRef: this._testResultHA,
+        busy: this._importBusy === true || this._testLoading === true, serialized };
+      const changed = !old || Object.keys(observed).some(key => old[key] !== observed[key]);
+      this._reportSnapshot = snapshot;
+      if (changed) this._reportRevision++;
+      this._reportObserved = observed;
+      this._reportContext = Object.freeze({ role, userId, connectionId: this._reportConnectionSerial,
+        datasetId: 'sentence-current-session-results', revision: this._reportRevision, connected,
+        canExport: hasUser && connected, sourceConfirmed: connected && !!snapshot && !observed.busy });
+      if (this._reportExport && this._reportExportLanguage !== this._lang) this._reportLocaleNeedsRefresh = true;
+      if (changed) this._reportExport?.contextChanged();
+    } finally { this._reportSyncing = false; }
+  }
+
+  _getSentenceReportContext() {
+    this._syncSentenceReportState();
+    return this._reportContext;
+  }
+
+  _sentenceReportAvailable() {
+    return this.isConnected && this._reportContext?.canExport === true && this._reportContext?.sourceConfirmed === true;
+  }
+
+  _sentenceReportState() {
+    if (!this._reportContext?.connected || !this._reportSnapshot) return 'no_data';
+    if (this._reportObserved?.busy) return 'not_checked';
+    return this._reportSnapshot.status;
+  }
+
+  _updateSentenceReportAvailability() {
+    const button = this.shadowRoot?.getElementById('download-sentence-report-btn');
+    if (button) button.disabled = !this._sentenceReportAvailable();
+    const state = this.shadowRoot?.getElementById('sentence-report-state');
+    if (state) state.innerHTML = createUiV3({ language: this._lang }).statusHtml(this._sentenceReportState());
+  }
+
+  _buildSentenceReportPayload({ context, draft, signal }) {
+    const current = this._getSentenceReportContext();
+    if (signal.aborted || draft.format !== 'json' || !this._sentenceReportAvailable() || current.revision !== context.revision) {
+      return { serialized: '', status: 'no_data' };
+    }
+    // includePrivate deliberately adds nothing: no private fields have been reviewed for this schema.
+    const report = this._reportSnapshot, pl = this._lang === 'pl', ui = createUiV3({ language: this._lang });
+    const label = section => section.available ? ui.status(section.status).label : ui.status('no_data').label;
+    const included = [pl ? 'Typ raportu, wersja schematu, zakres, stan i ograniczenia' : 'Report type, schema version, scope, status and limitations'];
+    included.push(report.import.available
+      ? (pl ? 'Wynik ostatniego importu: liczniki, numery wpisów z błędem i kontrolowane powody; wynik parsowania, odczytu listy i przeładowania' : 'Latest import result: counts, failed entry ordinals and controlled reasons; parsing, list read and reload outcomes')
+      : (pl ? 'Jawna informacja o braku wyniku importu' : 'Explicit marker that the import result is unavailable'));
+    included.push(report.assist.available
+      ? (pl ? 'Stan i kontrolowany typ ostatniej odpowiedzi Assist' : 'Status and controlled type of the latest Assist response')
+      : (pl ? 'Jawna informacja o braku wyniku Assist' : 'Explicit marker that the Assist result is unavailable'));
+    const excluded = pl
+      ? ['Tokeny i hasła', 'Użytkownicy, adresy i identyfikatory', 'Surowa konfiguracja i YAML', 'Treść zdań, sloty, odpowiedzi Assist, payloady i surowe błędy', 'Historia operacji i czas wykonania']
+      : ['Tokens and passwords', 'Users, addresses and identifiers', 'Raw configuration and YAML', 'Sentence content, slots, Assist speech, payloads and raw errors', 'Operation history and execution timestamps'];
+    const sourceLimit = pl
+      ? `Ostatnie dostępne wyniki z tej sesji; nie jest to historia ani kopia zdań. Numery wpisów importu nie są numerami linii YAML. Import: ${label(report.import)}. Assist: ${label(report.assist)}. Zaznaczenie pól prywatnych nie dodaje fraz, konfiguracji ani identyfikatorów. Niepotwierdzona komenda mogła zostać wykonana; raport jej nie ponawia.`
+      : `Latest available results from this session; not history or a sentence backup. Import entry ordinals are not YAML line numbers. Import: ${label(report.import)}. Assist: ${label(report.assist)}. Selecting private fields does not add phrases, configuration or identifiers. An unconfirmed command may have executed; this report never retries it.`;
+    const completeSuccess = report.import.available && report.assist.available && report.status === 'success';
+    return { serialized: this._reportObserved.serialized, confirmed: true, sourceConfirmed: true,
+      status: completeSuccess ? 'success' : 'partial', included, excluded, sourceLimit };
+  }
+
+  _sentenceReportDialogRoot() {
+    return this.shadowRoot?.querySelector('[data-ha-tools-export]')?.shadowRoot;
+  }
+
+  _createSentenceReportDialog(filename = 'sentence-results.json') {
+    this._reportExportLanguage = this._lang;
+    this._reportExport = createExportDialog({
+      root: this.shadowRoot, getLanguage: () => this._lang, createUiV3,
+      getContext: () => this._getSentenceReportContext(), formats: ['json'], defaultFormat: 'json', defaultFilename: filename,
+      policy: { id: 'sentence-operation-results-v1',
+        allowlistedFields: ['schema_version', 'report_type', 'coverage', 'status', 'limitations', 'import.available', 'import.status', 'import.attempted', 'import.created', 'import.failed.row', 'import.failed.reason', 'import.parse_failed', 'import.parse_status', 'import.list_read_status', 'import.reload_status', 'import.list_unavailable', 'import.reload_failed', 'assist.available', 'assist.status', 'assist.response_type'],
+        neverInclude: ['tokens', 'users', 'addresses', 'raw_config'] },
+      buildPayload: args => this._buildSentenceReportPayload(args),
+      performDownload: async args => {
+        this._reportDownloadPending = true;
+        try { return await this._performSentenceReportDownload(args); }
+        finally {
+          this._reportDownloadPending = false;
+          if (this._reportLocaleNeedsRefresh && !this._reportDisposed) {
+            clearTimeout(this._reportLocaleTimer);
+            this._reportLocaleTimer = setTimeout(() => { this._reportLocaleTimer = null; this._refreshSentenceReportLocale(); }, 0);
+          }
+        }
+      },
+    });
+  }
+
+  _sentenceReportFocusHandle(opener) {
+    // The common factory consumes isConnected/focus. Resolve the current button
+    // when a card repaint has replaced the original DOM opener.
+    const card = this;
+    const resolve = () => {
+      if (opener?.isConnected && !opener.disabled) return opener;
+      const button = card.shadowRoot?.getElementById('download-sentence-report-btn');
+      return button && !button.disabled ? button : card.shadowRoot?.querySelector('.tab-btn.active');
+    };
+    return { get isConnected() { return card.isConnected && !!resolve()?.isConnected; }, focus() { resolve()?.focus(); } };
+  }
+
+  _openSentenceReport(opener) {
+    this._syncSentenceReportState();
+    if (!this._sentenceReportAvailable() || (this._reportDownloadPending && !this._reportExport)) return;
+    if (this._reportExport && this._reportExportLanguage !== this._lang && !this._reportDownloadPending && !this._sentenceReportDialogRoot()) {
+      this._reportExport.destroy(); this._reportExport = null;
+    }
+    if (!this._reportExport) this._createSentenceReportDialog();
+    this._reportExport.open({ opener: this._sentenceReportFocusHandle(opener) });
+  }
+
+  _refreshSentenceReportLocale() {
+    if (!this._reportLocaleNeedsRefresh || this._reportDownloadPending || this._reportDisposed) return;
+    const root = this._sentenceReportDialogRoot();
+    if (!root) return;
+    const active = root.activeElement, name = root.querySelector('[data-export="filename"]');
+    const snapshot = { filename: name.value, key: active?.dataset.export,
+      start: active?.selectionStart, end: active?.selectionEnd, direction: active?.selectionDirection };
+    this._reportExport.destroy(); this._reportExport = null;
+    this._reportLocaleNeedsRefresh = false;
+    this._createSentenceReportDialog(snapshot.filename);
+    this._reportExport.open({ opener: this._sentenceReportFocusHandle(this.shadowRoot.getElementById('download-sentence-report-btn')) });
+    // open starts a pure preview, then this discards it before its Promise settles.
+    // The user's existing draft requires an explicit refresh in the new language.
+    this._reportExport.contextChanged();
+    const current = this._sentenceReportDialogRoot();
+    const target = Array.from(current.querySelectorAll('[data-export]')).find(node => node.dataset.export === snapshot.key && typeof node.focus === 'function' && !node.disabled)
+      || current.querySelector('[data-export="filename"]');
+    target.focus();
+    if (snapshot.start != null && typeof target.setSelectionRange === 'function') target.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction);
+  }
+
+  _performSentenceReportDownload({ blob, filename, format, context, signal }) {
+    const current = this._getSentenceReportContext();
+    if (signal.aborted || format !== 'json' || !this._sentenceReportAvailable() ||
+        ['role', 'userId', 'connectionId', 'datasetId', 'revision'].some(key => current[key] !== context[key])) throw new Error('Report context changed');
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.hidden = true;
+    try { this.shadowRoot.append(anchor); anchor.click(); }
+    finally {
+      anchor.remove();
+      const timer = setTimeout(() => { URL.revokeObjectURL(url); this._reportDownloadUrls.delete(url); }, 0);
+      this._reportDownloadUrls.set(url, timer);
+    }
+    return { outcome: 'initiated' };
+  }
+
+  _destroySentenceReport() {
+    this._reportDisposed = true;
+    this._reportExport?.destroy(); this._reportExport = null;
+    for (const remove of this._reportConnectionListeners) remove();
+    this._reportConnectionListeners = [];
+    this._reportConnectionRef = undefined; this._reportConnectionWasOnline = undefined;
+    clearTimeout(this._reportLocaleTimer); this._reportLocaleTimer = null;
+    for (const [url, timer] of this._reportDownloadUrls) { clearTimeout(timer); URL.revokeObjectURL(url); }
+    this._reportDownloadUrls.clear();
+    this._reportSnapshot = null; this._reportContext = null; this._reportObserved = null;
+  }
+
   async importFromYaml(yamlText) {
     if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     if (this._importBusy) return;
     const epoch = this._dataEpoch;
+    const reportEpoch = this._reportSourceEpoch;
     this._importDraft = yamlText;
     try {
       const lines = yamlText.split('\n');
@@ -1323,7 +1943,7 @@ class HASentenceManager extends HTMLElement {
       await this._runSentenceImport(rows);
 
     } catch (error) {
-      if (epoch !== this._dataEpoch) return;
+      if (epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch) return;
       this._importResult = { epoch, status: 'error', total: 0, created: 0, failed: [], parseFailed: true };
       this.render();
       this.showNotification(this._lang === 'pl' ? 'Błąd importu YAML' : 'Error importing YAML', 'error');
@@ -1342,7 +1962,11 @@ class HASentenceManager extends HTMLElement {
 
   async _runSentenceImport(rows) {
     const result = this._importResult;
-    const current = () => result && result === this._importResult && result.epoch === this._dataEpoch && this._canManageSentences();
+    const reportEpoch = this._reportSourceEpoch;
+    const current = () => {
+      this._syncSentenceReportState();
+      return result && result === this._importResult && reportEpoch === this._reportSourceEpoch && result.epoch === this._dataEpoch && this._canManageSentences();
+    };
     if (!current() || this._importBusy) return;
     this._importBusy = true;
     result.failed = [];
@@ -1377,11 +2001,13 @@ class HASentenceManager extends HTMLElement {
 
   async retryImportFailed() {
     const result = this._importResult;
+    const reportEpoch = this._reportSourceEpoch;
     if (!result || result.epoch !== this._dataEpoch || !this._canManageSentences() || this._importBusy || !result.failed.length) return;
     // Reconcile an uncertain write against the authoritative list before creating again.
     let stored;
     try { stored = await this._apiList(result.language); } catch (e) { result.listUnavailable = true; this.render(); return; }
-    if (result !== this._importResult || result.epoch !== this._dataEpoch || !this._canManageSentences() || !Array.isArray(stored)) return;
+    this._syncSentenceReportState();
+    if (result !== this._importResult || reportEpoch !== this._reportSourceEpoch || result.epoch !== this._dataEpoch || !this._canManageSentences() || !Array.isArray(stored)) return;
     const rows = [];
     for (const row of result.failed) {
       const p = row.payload;
@@ -1598,6 +2224,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   render() {
+    this._syncSentenceReportState();
     if (!this._hass) return;
     const tabFocus = _rememberTabFocus(this);
     if (!this.shadowRoot) {
@@ -1671,6 +2298,8 @@ class HASentenceManager extends HTMLElement {
 
     this.attachEventListeners();
     _bindResponsiveTabs(this, tabFocus);
+    this._updateSentenceReportAvailability();
+    this._refreshSentenceReportLocale();
   }
 
   _renderHaSentencesTab() {
@@ -2147,7 +2776,15 @@ class HASentenceManager extends HTMLElement {
           <h2>${this._lang === 'pl' ? 'Import / Eksport' : 'Import / Export'}</h2>
 
           <div class="export-container">
+            <h3>${this._lang === 'pl' ? 'Raport wyników' : 'Results report'}</h3>
+            <p>${this._lang === 'pl' ? 'Ostatni import i test Assist z tej sesji. Bez treści zdań i konfiguracji; to nie jest kopia zapasowa zdań.' : 'The latest import and Assist test from this session. No sentence content or configuration; this is not a sentence backup.'}</p>
+            <p id="sentence-report-state" role="status">${createUiV3({ language: this._lang }).statusHtml(this._sentenceReportState())}</p>
+            <button type="button" class="btn btn-primary" id="download-sentence-report-btn" ${this._sentenceReportAvailable() ? '' : 'disabled'}>${this._lang === 'pl' ? 'Pobierz raport' : 'Download report'}</button>
+          </div>
+
+          <div class="export-container">
             <h3>${this._lang === 'pl' ? 'Eksport do YAML' : 'Export as YAML'}</h3>
+            <p>${this._lang === 'pl' ? 'Lokalny YAML do ponownego importu zawiera pełną treść zdań. Kopiowanie do schowka zachowuje konfigurację.' : 'Local YAML for re-import contains the complete sentence content. Copying to the clipboard preserves configuration.'}</p>
             <textarea id="yaml-output" class="yaml-editor" readonly>${_esc(this.exportAsYaml())}</textarea>
             <button class="btn btn-primary" id="copy-yaml-btn">${this._lang === 'pl' ? 'Kopiuj do schowka' : 'Copy to Clipboard'}</button>
           </div>
@@ -2179,6 +2816,7 @@ class HASentenceManager extends HTMLElement {
   }
 
   attachEventListeners() {
+    this.shadowRoot.getElementById('download-sentence-report-btn')?.addEventListener('click', event => this._openSentenceReport(event.currentTarget));
     this.shadowRoot.getElementById('retry-import-failed-btn')?.addEventListener('click', () => this.retryImportFailed());
     this.shadowRoot.getElementById('retry-test-ha-btn')?.addEventListener('click', () => this.retryTestSentenceHA());
     this.shadowRoot.getElementById('test-input')?.addEventListener('input', event => { this._testDraft = event.target.value; });
@@ -2349,12 +2987,7 @@ class HASentenceManager extends HTMLElement {
     }
 
     // Export/Import
-    this.shadowRoot.querySelector('#copy-yaml-btn')?.addEventListener('click', () => {
-      const textarea = this.shadowRoot.querySelector('#yaml-output');
-      textarea.select();
-      document.execCommand('copy');
-      this.showNotification(this._lang === 'pl' ? 'YAML skopiowany do schowka' : 'YAML copied to clipboard', 'success');
-    });
+    this.shadowRoot.querySelector('#copy-yaml-btn')?.addEventListener('click', () => this._copyExportYaml());
 
     this.shadowRoot.querySelector('#import-yaml-btn')?.addEventListener('click', () => {
       const yaml = this.shadowRoot.querySelector('#yaml-input').value;
@@ -3670,7 +4303,14 @@ ${_RESPONSIVE_CONTROL_CSS}
     return html;
   }
 
+  connectedCallback() {
+    this._reportDisposed = false;
+    this._syncSentenceReportState();
+    this._updateSentenceReportAvailability();
+  }
+
   disconnectedCallback() {
+    this._destroySentenceReport();
     this._tabResizeObserver?.disconnect(); this._tabResizeObserver = null; this._tabContainerWidth = null; this.removeAttribute('data-responsive-tabs-observed');
     this._invalidateSession();
     this._hass = null;
@@ -3704,6 +4344,8 @@ ${_RESPONSIVE_CONTROL_CSS}
     this._importResult = null;
     this._importBusy = false;
     this._generatedActionYaml = null;
+    this._reportSourceEpoch++;
+    this._syncSentenceReportState();
   }
 
   // --- Pagination helper ---

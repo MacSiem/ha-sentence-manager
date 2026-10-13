@@ -344,3 +344,29 @@ test('Escape restores report opener focus; detach removes dialog and transport l
     assert.deepEqual(f.downloads, []);
   } finally { f.close(); }
 });
+
+// Owner supplement after reviewing the child's runtime source; not child tests-first evidence.
+for (const change of ['browser-offline', 'inactive-user']) test(`${change} consumes preview and prevents Save even with a connected socket`, async () => {
+  const f = await fixture();
+  try {
+    f.seed(); await f.open(); const save = f.field('save');
+    if (change === 'browser-offline') Object.defineProperty(f.window.navigator, 'onLine', { configurable: true, value: false });
+    else { f.hass.user.is_active = false; f.card.hass = f.hass; }
+    save.click(); await flush();
+    assert.equal(f.downloads.length, 0); assert.equal(f.field('preview').textContent, '');
+    assert.equal(f.field('save').disabled, true);
+  } finally { f.close(); }
+});
+for (const change of ['browser-roundtrip', 'command-language']) test(`${change} rejects the pending Assist outcome`, async () => {
+  const f = await fixture();
+  try {
+    let finish;
+    f.hass.callWS = () => new Promise(resolve => { finish = resolve; });
+    const pending = f.card._testSentenceHA('synthetic pending');
+    if (change === 'browser-roundtrip') { f.window.dispatchEvent(new f.window.Event('offline')); f.window.dispatchEvent(new f.window.Event('online')); }
+    else f.card.setConfig({ ...f.card.config, language: 'pl' });
+    finish({ response: { response_type: 'action_done', data: { success: [], failed: [] } } }); await pending;
+    assert.equal(f.card._testResultHA, null); assert.equal(f.card._testLoading, false);
+    assert.equal(f.card.shadowRoot.querySelector('#download-sentence-report-btn').disabled, true);
+  } finally { f.close(); }
+});
