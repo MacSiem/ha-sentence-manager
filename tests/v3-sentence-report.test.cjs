@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { JSDOM, VirtualConsole } = require('jsdom');
+const installNativeDialog=require('./helpers/native-dialog.cjs');
 const source = fs.readFileSync(process.env.SENTENCE_REPORT_SOURCE_PATH || 'custom_components/ha_sentence_manager/www/ha-sentence-manager.js', 'utf8');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -11,6 +12,7 @@ const assist = (status = 'unconfirmed') => ({ status, success: status === 'succe
 async function fixture(language = 'en') {
   const dom = new JSDOM('', { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/', virtualConsole: new VirtualConsole() });
   const { window } = dom;
+  installNativeDialog(window);
   const listeners = new Map();
   const connection = {
     connected: true, socket: { readyState: 1 },
@@ -386,4 +388,16 @@ for (const change of ['browser-roundtrip', 'command-language']) test(`${change} 
     assert.equal(f.card._testResultHA, null); assert.equal(f.card._testLoading, false);
     assert.equal(f.card.shadowRoot.querySelector('#download-sentence-report-btn').disabled, true);
   } finally { f.close(); }
+});
+
+
+test('native report remains connected across card repaint and cancel restores current opener without another command',async()=>{
+ const f=await fixture();try{
+  f.seed();await f.open();const host=f.card.shadowRoot.querySelector('[data-ha-tools-export]'),native=f.report().querySelector('dialog');assert(native);assert(native.matches(':modal'));
+  const name=f.field('filename');name.value='native-sentence-report.json';f.event(name,'input');await f.refresh();const frozen=f.field('preview').textContent;assert(frozen.length);name.focus();name.setSelectionRange(3,8);
+  const before=f.requests.length,oldButton=f.card.shadowRoot.querySelector('#download-sentence-report-btn');const observer=new f.window.MutationObserver(()=>{});observer.observe(f.card.shadowRoot,{childList:true,subtree:true});
+  f.card.render();const removed=observer.takeRecords().some(change=>Array.from(change.removedNodes).some(node=>node===host||node.contains?.(host)));observer.disconnect();
+  assert.equal(removed,false);assert.equal(oldButton.isConnected,false);assert.equal(f.card.shadowRoot.querySelector('[data-ha-tools-export]'),host);assert(native.matches(':modal'));assert.equal(f.report().querySelector('dialog'),native);assert.equal(f.field('filename'),name);assert.equal(name.value,'native-sentence-report.json');assert.equal(name.selectionStart,3);assert.equal(name.selectionEnd,8);assert.equal(f.report().activeElement,name);assert.equal(f.field('preview').textContent,frozen);assert.equal(f.requests.length,before);assert.equal(f.downloads.length,0);
+  native.dispatchEvent(new f.window.Event('cancel',{cancelable:true}));await flush();assert.equal(native.open,false);assert.equal(f.report(),undefined);assert.equal(f.card.shadowRoot.activeElement.id,'download-sentence-report-btn');await f.open();assert(f.report().querySelector('dialog').matches(':modal'));assert.equal(f.field('private').checked,false);assert.equal(f.requests.length,before);assert.equal(f.downloads.length,0);
+ }finally{f.close();}
 });
