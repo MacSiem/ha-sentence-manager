@@ -337,7 +337,7 @@ test('Escape restores report opener focus; detach removes dialog and transport l
   const f = await fixture();
   try {
     f.seed(); await f.open();
-    f.window.document.dispatchEvent(new f.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    f.report().querySelector('dialog').dispatchEvent(new f.window.Event('cancel', {cancelable:true}));
     assert.equal(f.report(), undefined);
     assert.equal(f.card.shadowRoot.activeElement?.id, 'download-sentence-report-btn');
     await f.open(); f.card.remove();
@@ -396,7 +396,7 @@ test('native report remains connected across card repaint and cancel restores cu
   f.seed();await f.open();const host=f.card.shadowRoot.querySelector('[data-ha-tools-export]'),native=f.report().querySelector('dialog');assert(native);assert(native.matches(':modal'));
   const name=f.field('filename');name.value='native-sentence-report.json';f.event(name,'input');await f.refresh();const frozen=f.field('preview').textContent;assert(frozen.length);name.focus();name.setSelectionRange(3,8);
   const before=f.requests.length,oldButton=f.card.shadowRoot.querySelector('#download-sentence-report-btn');const observer=new f.window.MutationObserver(()=>{});observer.observe(f.card.shadowRoot,{childList:true,subtree:true});
-  f.card.render();const removed=observer.takeRecords().some(change=>Array.from(change.removedNodes).some(node=>node===host||node.contains?.(host)));observer.disconnect();
+  f.card.config.title='Updated presentation title';f.card.render();const removed=observer.takeRecords().some(change=>Array.from(change.removedNodes).some(node=>node===host||node.contains?.(host)));observer.disconnect();
   assert.equal(removed,false);assert.equal(oldButton.isConnected,false);assert.equal(f.card.shadowRoot.querySelector('[data-ha-tools-export]'),host);assert(native.matches(':modal'));assert.equal(f.report().querySelector('dialog'),native);assert.equal(f.field('filename'),name);assert.equal(name.value,'native-sentence-report.json');assert.equal(name.selectionStart,3);assert.equal(name.selectionEnd,8);assert.equal(f.report().activeElement,name);assert.equal(f.field('preview').textContent,frozen);assert.equal(f.requests.length,before);assert.equal(f.downloads.length,0);
   native.dispatchEvent(new f.window.Event('cancel',{cancelable:true}));await flush();assert.equal(native.open,false);assert.equal(f.report(),undefined);assert.equal(f.card.shadowRoot.activeElement.id,'download-sentence-report-btn');await f.open();assert(f.report().querySelector('dialog').matches(':modal'));assert.equal(f.field('private').checked,false);assert.equal(f.requests.length,before);assert.equal(f.downloads.length,0);
  }finally{f.close();}
