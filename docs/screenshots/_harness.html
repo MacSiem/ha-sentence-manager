@@ -27,20 +27,20 @@ html,body{margin:0;padding:0;font-family:system-ui,sans-serif}body{padding:24px;
     callWS:async message=>{
       if(message.type==='ha_sentence_manager/list')return structuredClone(rows.filter(row=>!message.language||row.language===message.language));
       if(message.type==='conversation/process')return null; // Deliberately unconfirmed, never simulated success.
-      if(!admin)throw Error('unauthorized');
+      if(!admin)throw Object.assign(new Error('Administrator required'),{code:'unauthorized'});
       if(message.type==='ha_sentence_manager/create'){
-        if(!message.intent||/[\/]/.test(message.intent))throw Error('invalid_payload: Invalid sentence');
+        if(!message.intent||/[\/]/.test(message.intent))throw Object.assign(new Error('Invalid sentence'),{code:'invalid_payload'});
         const id='synthetic-created-'+(++serial);
         rows.push({id,revision:'synthetic-revision-1',language:message.language,intent:message.intent,sentences:message.sentences,slots:message.slots||{},response:message.response||''});return {id};
       }
       if(message.type==='ha_sentence_manager/update'){
         const row=rows.find(row=>row.id===message.sentence_id);
-        if(!row||row.revision!==message.revision)throw Error('conflict');
+        if(!row||row.revision!==message.revision)throw Object.assign(new Error('Sentence changed'),{code:'conflict'});
         Object.assign(row,message.patch,{revision:'synthetic-revision-'+(++serial+1)});return {ok:true};
       }
       if(message.type==='ha_sentence_manager/delete'){
         const row=rows.find(row=>row.id===message.sentence_id);
-        if(!row||row.revision!==message.revision)throw Error('conflict');
+        if(!row||row.revision!==message.revision)throw Object.assign(new Error('Sentence changed'),{code:'conflict'});
         rows=rows.filter(row=>row!==rows.find(row=>row.id===message.sentence_id));return {ok:true};
       }
       if(message.type==='ha_sentence_manager/reload')return {ok:true};
