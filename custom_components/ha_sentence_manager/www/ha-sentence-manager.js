@@ -2812,7 +2812,7 @@ class HASentenceManager extends HTMLElement {
             <div style="font-size:12px;font-weight:600;color:var(--bento-text-secondary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">
               ${this._lang === 'pl' ? 'Test lokalny (dopasowanie wzorców, offline)' : 'Local pattern match (offline)'}
             </div>
-            <div style="display:flex;gap:8px;">
+            <div class="test-input-row">
               <input type="text" id="test-local-input" placeholder="${this._lang === 'pl' ? 'Szukaj wzorca lokalnie...' : 'Match pattern locally...'}" style="flex:1;">
               <button class="btn btn-secondary" id="test-btn">🔍 ${this._lang === 'pl' ? 'Test lokalny' : 'Local test'}</button>
             </div>
@@ -3367,7 +3367,7 @@ canvas {
 .file-path-info { margin-top: 8px; padding: 8px; background: var(--bento-card); border-radius: var(--bento-radius-xs); font-size: 13px; }
 .hint { font-size: 12px; color: var(--bento-text-muted); }
 .test-input-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.test-input-row input { flex: 1; min-width: 0; box-sizing: border-box; }
+.test-input-row input { flex: 1 1 180px; min-width: 0; box-sizing: border-box; }
 .ha-test-result { padding: 12px; border-radius: var(--bento-radius-sm); margin-top: 12px; }
 .ha-test-result.test-match { background: var(--bento-success-light); border: 1px solid rgba(16, 185, 129, 0.3); }
 .ha-test-result.test-no-match { background: var(--bento-warning-light); border: 1px solid rgba(245, 158, 11, 0.3); }
@@ -3391,9 +3391,9 @@ canvas {
 .tryit-header { margin-bottom: 12px; }
 .tryit-title { display: block; font-size: 14px; font-weight: 700; color: var(--bento-text); letter-spacing: -0.01em; margin-bottom: 4px; }
 .tryit-hint { display: block; font-size: 12px; color: var(--bento-text-muted); line-height: 1.4; }
-.tryit-input-row { display: flex; gap: 8px; align-items: stretch; }
-.tryit-input { flex: 1; }
-.tryit-btn { white-space: nowrap; flex-shrink: 0; }
+.tryit-input-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.tryit-input { flex: 1 1 180px; }
+.tryit-btn { width: auto; white-space: nowrap; flex-shrink: 0; }
 .tryit-result-card {
   margin-top: 12px;
   padding: 14px 16px;

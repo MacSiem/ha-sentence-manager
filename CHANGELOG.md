@@ -2,6 +2,7 @@
 
 ## 5.1.0 (2026-10-15)
 
+- Keep the voice-command and local-pattern fields readable in narrow cards by wrapping their actions instead of squeezing the input.
 - Follow Home Assistant’s UI language in the card configuration editor while preserving the focused draft and the separate Assist language setting.
 - Show partial YAML imports with failed entry reasons and retry only unsaved rows after checking the stored list. Serialize retries from the first read through save and reload.
 - Replace old import results and retry queues when new input contains no recognized sentences.
