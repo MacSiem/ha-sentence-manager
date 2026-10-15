@@ -1658,22 +1658,22 @@ class HASentenceManager extends HTMLElement {
     let imported = { available: false }, assist = { available: false };
     const input = this._importResult;
     if (this._canManageSentences() && record(input) && input.epoch === this._dataEpoch &&
-        states.includes(input.status) && count(input.total) && count(input.created) && input.created <= input.total &&
+        [...states, 'no_data'].includes(input.status) && count(input.total) && count(input.created) && input.created <= input.total &&
         Array.isArray(input.failed) && input.failed.length <= input.total &&
-        ['parseFailed', 'listUnavailable', 'reloadFailed'].every(key => input[key] === undefined || typeof input[key] === 'boolean')) {
+        ['parseFailed', 'listUnavailable', 'reloadFailed', 'unrecognized'].every(key => input[key] === undefined || typeof input[key] === 'boolean')) {
       const seen = new Set();
       const validRows = input.failed.every(row => {
         if (!record(row) || !Number.isSafeInteger(row.row) || row.row < 1 || row.row > input.total || seen.has(row.row)) return false;
         seen.add(row.row); return true;
       });
-      if (validRows && (input.total > 0 || input.parseFailed === true)) {
+      if (validRows && (input.total > 0 || input.parseFailed === true || (input.unrecognized === true && input.status === 'no_data' && input.created === 0 && input.failed.length === 0))) {
         const failed = input.failed.map(row => ({ row: row.row, reason: reasons.includes(row.code) ? row.code : 'unconfirmed' }));
         const flags = input.parseFailed === true || input.listUnavailable === true || input.reloadFailed === true;
         const inconsistentSuccess = input.status === 'success' && (flags || failed.length || input.created !== input.total || input.listUnavailable === undefined || input.reloadFailed === undefined);
         imported = {
           available: true, status: inconsistentSuccess ? 'unconfirmed' : input.status,
           attempted: input.total, created: input.created, failed,
-          parse_failed: input.parseFailed === true, parse_status: input.parseFailed === true ? 'error' : 'success',
+          parse_failed: input.parseFailed === true, parse_status: input.unrecognized === true ? 'no_data' : input.parseFailed === true ? 'error' : 'success',
           list_read_status: input.listUnavailable === undefined ? 'not_checked' : input.listUnavailable ? 'unconfirmed' : 'success',
           reload_status: input.reloadFailed === undefined ? 'not_checked' : input.reloadFailed ? 'unconfirmed' : 'success',
           list_unavailable: input.listUnavailable === true, reload_failed: input.reloadFailed === true,
@@ -1695,7 +1695,7 @@ class HASentenceManager extends HTMLElement {
     }
     if (!imported.available && !assist.available) return null;
     const activeStates = [imported, assist].filter(section => section.available).map(section => section.status);
-    const status = ['unconfirmed', 'error', 'partial', 'success'].find(state => activeStates.includes(state));
+    const status = ['unconfirmed', 'error', 'partial', 'no_data', 'success'].find(state => activeStates.includes(state));
     const limitations = ['current_session_only', 'latest_results_only', 'not_sentence_backup', 'no_private_fields'];
     if (!imported.available) limitations.push('import_result_unavailable');
     if (!assist.available) limitations.push('assist_result_unavailable');
@@ -1978,6 +1978,8 @@ class HASentenceManager extends HTMLElement {
 
       if (currentSentence && currentSentence.trigger) imported.push(currentSentence);
       if (imported.length === 0) {
+        this._importResult = { epoch, language: this._currentLanguage || this._hass?.config?.language || 'en', status: 'no_data', total: 0, created: 0, failed: [], unrecognized: true };
+        this.render();
         this.showNotification(this._lang === 'pl' ? 'Brak rozpoznanych zdań w YAML' : 'No sentences recognized in YAML', 'info');
         return;
       }
@@ -2004,7 +2006,7 @@ class HASentenceManager extends HTMLElement {
     return (reasons[code] || ['Save could not be confirmed. Review the stored list before retrying.', 'Nie potwierdzono zapisu. Sprawdź zapisaną listę przed ponowieniem.'])[this._lang === 'pl' ? 1 : 0];
   }
 
-  async _runSentenceImport(rows) {
+  async _runSentenceImport(rows, reconcile = false) {
     const result = this._importResult;
     const reportEpoch = this._reportSourceEpoch;
     const current = () => {
@@ -2016,6 +2018,25 @@ class HASentenceManager extends HTMLElement {
     result.failed = [];
     this.render();
     try {
+      if (reconcile) {
+        let stored;
+        try { stored = await this._apiList(result.language); }
+        catch (e) { stored = null; }
+        if (!current()) return;
+        if (!Array.isArray(stored)) {
+          result.failed = rows;
+          result.listUnavailable = true;
+          result.status = result.created ? 'partial' : 'error';
+          return;
+        }
+        rows = rows.filter(row => {
+          const p = row.payload;
+          const sameSlots = value => JSON.stringify(Object.entries(value || {}).sort()) === JSON.stringify(Object.entries(p.slots).sort());
+          const saved = stored.some(item => item.language === p.language && item.intent === p.intent && Array.isArray(item.sentences) && item.sentences.includes(p.sentences[0]) && (item.response || '') === p.response && sameSlots(item.slots));
+          if (saved) result.created++;
+          return !saved;
+        });
+      }
       for (const row of rows) {
         if (!current()) return;
         try {
@@ -2047,26 +2068,15 @@ class HASentenceManager extends HTMLElement {
     const result = this._importResult;
     const reportEpoch = this._reportSourceEpoch;
     if (!result || result.epoch !== this._dataEpoch || !this._canManageSentences() || this._importBusy || !result.failed.length) return;
-    // Reconcile an uncertain write against the authoritative list before creating again.
-    let stored;
-    try { stored = await this._apiList(result.language); } catch (e) { result.listUnavailable = true; this.render(); return; }
-    this._syncSentenceReportState();
-    if (result !== this._importResult || reportEpoch !== this._reportSourceEpoch || result.epoch !== this._dataEpoch || !this._canManageSentences() || !Array.isArray(stored)) return;
-    const rows = [];
-    for (const row of result.failed) {
-      const p = row.payload;
-      const sameSlots = value => JSON.stringify(Object.entries(value || {}).sort()) === JSON.stringify(Object.entries(p.slots).sort());
-      const saved = stored.some(item => item.language === p.language && item.intent === p.intent && Array.isArray(item.sentences) && item.sentences.includes(p.sentences[0]) && (item.response || '') === p.response && sameSlots(item.slots));
-      if (saved) result.created++; else rows.push(row);
-    }
-    await this._runSentenceImport(rows);
+    // One busy interval owns reconciliation, creates and final read/reload.
+    await this._runSentenceImport(result.failed, true);
   }
 
   _renderImportResult() {
     const result = this._importResult;
     if (!result) return '';
     const pl = this._lang === 'pl';
-    const count = pl ? `Zapisano ${result.created} z ${result.total} zdań` : `Saved ${result.created} of ${result.total} sentences`;
+    const count = result.unrecognized ? (pl ? 'Brak rozpoznanych zdań w YAML' : 'No sentences recognized in YAML') : (pl ? `Zapisano ${result.created} z ${result.total} zdań` : `Saved ${result.created} of ${result.total} sentences`);
     const rows = result.failed.map(row => `<li>${pl ? 'Wiersz' : 'Row'} ${row.row}: ${_esc(this._importFailureReason(row.code))}</li>`).join('');
     const reload = result.reloadFailed || result.listUnavailable ? `<p>${pl ? 'Zapis i przeładowanie to osobne wyniki. Odśwież listę i przeładuj zdania.' : 'Saving and reloading are separate outcomes. Refresh the list and reload sentences.'}</p>` : '';
     const parse = result.parseFailed ? `<p>${pl ? 'Nie rozpoznano poprawnego YAML.' : 'No valid YAML was recognized.'}</p>` : '';
