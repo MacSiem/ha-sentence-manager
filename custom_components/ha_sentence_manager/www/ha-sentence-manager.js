@@ -2813,7 +2813,7 @@ class HASentenceManager extends HTMLElement {
               ${this._lang === 'pl' ? 'Test lokalny (dopasowanie wzorców, offline)' : 'Local pattern match (offline)'}
             </div>
             <div class="test-input-row">
-              <input type="text" id="test-local-input" placeholder="${this._lang === 'pl' ? 'Szukaj wzorca lokalnie...' : 'Match pattern locally...'}" style="flex:1;">
+              <input type="text" id="test-local-input" placeholder="${this._lang === 'pl' ? 'Szukaj wzorca lokalnie...' : 'Match pattern locally...'}">
               <button class="btn btn-secondary" id="test-btn">🔍 ${this._lang === 'pl' ? 'Test lokalny' : 'Local test'}</button>
             </div>
           </div>
