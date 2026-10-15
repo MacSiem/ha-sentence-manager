@@ -26,13 +26,27 @@ Manage Home Assistant Assist custom sentences (intents, slots, responses) from a
 | Card requests `conversation.reload` after a successful create/update/delete | Calling `ha_sentence_manager.reload` manually (e.g. after hand-editing a YAML file) |
 | Stable per-entry ids via sidecar `.meta.yaml` files | Testing a phrase against `conversation/process` in the Test tab |
 
+## Import and Assist results in 5.1
+
+A YAML import reports how many entries were saved and lists failed row ordinals with controlled reasons. A partial import stays **Partial**. **Retry failed rows only** reads the stored list first and retries the remaining entries, so an entry saved before a lost reply is not created again. Pasting new input with no recognized sentences clears the previous result and retry queue. Row ordinals are imported entries, not YAML line numbers.
+
+Assist tests keep an error response as **Error**. A missing or malformed reply is **Unconfirmed**, and the command draft stays available. An unconfirmed command may already have executed. There is no automatic retry; review the warning before choosing a manual retry.
+
+The **Results report** in Import/Export lets you review a local JSON file before saving it. It contains the latest available import and Assist outcomes from the current session: status, counts, controlled failed-row reasons and list/reload outcomes. It excludes phrases, slots, responses, identifiers, timestamps, raw errors and YAML. It is neither operation history nor a sentence backup; the existing YAML generation and clipboard actions remain available for complete sentence content.
+
+The configuration editor follows Home Assistant’s UI language. Its Language field controls sentence/Assist configuration and does not change the UI language of Home Assistant.
+
 ## Screenshots
 
 | Light | Dark |
 |---|---|
-| ![Sentences tab, light theme](docs/screenshots/card-main-light.png) | ![Sentences tab, dark theme](docs/screenshots/card-main-dark.png) |
+| ![Sentences tab, light theme](docs/screenshots/card-sentences-light-5.1.0.png) | ![Sentences tab, dark theme](docs/screenshots/card-sentences-dark-5.1.0.png) |
 
-*The searchable Sentences tab with synthetic QA phrases, captured in a real Home Assistant dashboard. Dark mode follows your Home Assistant theme.*
+*Version 5.1.0 with synthetic demonstration phrases in the bundled screenshot fixture. The card follows the Home Assistant theme.*
+
+![Partial import with a failed row and a results report](docs/screenshots/card-partial-import-5.1.0.png)
+
+*Two of three synthetic entries saved; the failed row stays visible for review and retry. These screenshots do not contain household data.*
 
 ## Installation
 
