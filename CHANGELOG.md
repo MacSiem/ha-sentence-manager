@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.1.0 (2026-10-15)
+
+- Show partial YAML imports with failed entry reasons and retry only unsaved rows after checking the stored list. Serialize retries from the first read through save and reload.
+- Replace old import results and retry queues when new input contains no recognized sentences.
+- Keep missing or malformed Assist responses unconfirmed, preserve the command draft and warn before a conscious retry.
+- Review a local JSON report of the latest import and Assist outcomes before saving; exclude phrases, slots, identifiers, raw configuration and responses. Keep existing YAML generation and clipboard actions.
+- Preserve keyboard navigation, all tabs and actions in narrow cards, with Polish and English status labels.
+
 ## 5.0.16 (2026-10-08)
 
 - Save Title and Language edits through Home Assistant’s `config-changed` event while preserving other card settings.
