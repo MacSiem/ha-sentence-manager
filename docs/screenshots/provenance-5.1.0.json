@@ -1,20 +1,20 @@
 {
   "version": "5.1.0",
-  "source_commit": "1722c21d0ad8ec345443ebf8a59d54f3c82493b9",
-  "source_sha256": "0fd3c9c09684945cf18d5022c6feca6695ec84c7ddc0e607c0651473eb03c56a",
+  "source_commit": "ef932f0b534d9f77c95b586190bff5f4e57633cf",
+  "source_sha256": "096688ea7e05bf2176dfd8ce16b68d17fff277c68bc94fb4b492e73813f8fda9",
   "fixture": "docs/screenshots/_harness.html",
   "synthetic": true,
   "browser": "Codex in-app Browser",
-  "method": "Full-page JPEG at viewport1280; pixel crop to read-only DOM card bounds, then PNG; no rendered UI changes or hidden controls. Main list fixtures d380 and final e0da differ only in unused error-code shapes. Partial fixture uses actual HA-style error code invalid_payload.",
+  "method": "Full-page JPEG at viewport1280; pixel crop to read-only DOM card bounds, then PNG; no rendered UI changes or hidden controls. All three scenes recaptured on ef932/096688ea after Test-only CSS fix. PNGs byte-identical to the personally viewed200 scenes, which are outside the changed Test rows.",
   "files": [
     {
       "file": "card-sentences-light-5.1.0.png",
       "sha256": "2cce415f97c1fad8e62ea2d463e6bd76d4ada6b2313ec4872cd211e0af666f53",
       "bytes": 265665,
-      "fixture_commit": "d3801437c863558387c954f85a77185207ea892f",
+      "fixture_commit": "ef932f0b534d9f77c95b586190bff5f4e57633cf",
       "theme": "light",
       "scene": "light",
-      "raw_capture": "sentence200-light-full.jpg",
+      "raw_capture": "sentence205-light-full.jpg",
       "DOM_document_rect": {
         "height": 1007.953125,
         "viewportWidth": 1280,
@@ -27,16 +27,17 @@
         "y": 57,
         "width": 900,
         "height": 1008
-      }
+      },
+      "recaptured_after_Test_CSS_fix": true
     },
     {
       "file": "card-sentences-dark-5.1.0.png",
       "sha256": "9ad8106ce26ecafceef77153317b2a252c7928dae3d44f004995c3ad03de0218",
       "bytes": 258056,
-      "fixture_commit": "d3801437c863558387c954f85a77185207ea892f",
+      "fixture_commit": "ef932f0b534d9f77c95b586190bff5f4e57633cf",
       "theme": "dark",
       "scene": "dark",
-      "raw_capture": "sentence200-dark-full.jpg",
+      "raw_capture": "sentence205-dark-full.jpg",
       "DOM_document_rect": {
         "height": 1007.953125,
         "viewportWidth": 1280,
@@ -49,16 +50,17 @@
         "y": 57,
         "width": 900,
         "height": 1008
-      }
+      },
+      "recaptured_after_Test_CSS_fix": true
     },
     {
       "file": "card-partial-import-5.1.0.png",
       "sha256": "51ecec5b26a95586184a948071562d016fc47af5a0e96f7455ba521d2f97d03c",
       "bytes": 450604,
-      "fixture_commit": "e0da520caa16bd7c02d3b18bc7fe14d1eb04f79e",
+      "fixture_commit": "ef932f0b534d9f77c95b586190bff5f4e57633cf",
       "theme": "dark",
       "scene": "partial",
-      "raw_capture": "sentence200-partial-full.jpg",
+      "raw_capture": "sentence205-partial-full.jpg",
       "DOM_document_rect": {
         "height": 1801.703125,
         "viewportWidth": 1280,
@@ -71,7 +73,8 @@
         "y": 57,
         "width": 900,
         "height": 1802
-      }
+      },
+      "recaptured_after_Test_CSS_fix": true
     }
   ]
 }
