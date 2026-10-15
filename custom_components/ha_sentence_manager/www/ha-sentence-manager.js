@@ -4491,6 +4491,28 @@ class HASentenceManagerEditor extends HTMLElement {
         const value = String(this.config[key] ?? (key === 'title' ? 'Sentence Manager' : 'en'));
         if (input && input.value !== value) input.value = value;
       }
+      this._updateLabels();
+    }
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._updateLabels();
+  }
+
+  _updateLabels() {
+    // The card language config selects Assist content; editor copy follows HA's UI locale.
+    const language = this._hass?.language || navigator.language || 'en';
+    const pl = language.startsWith('pl');
+    const labels = {
+      'h2': pl ? 'Konfiguracja Sentence Manager' : 'Sentence Manager Configuration',
+      'p': pl ? 'Podstawowa konfiguracja karty. Większość ustawień jest dostępna w interfejsie karty.' : 'Basic card configuration. Most settings are managed within the card interface.',
+      '[data-label="title"]': pl ? 'Tytuł:' : 'Title:',
+      '[data-label="language"]': pl ? 'Język:' : 'Language:',
+    };
+    for (const [selector, text] of Object.entries(labels)) {
+      const label = this.querySelector(selector);
+      if (label && label.textContent !== text) label.textContent = text;
     }
   }
 
@@ -4507,16 +4529,17 @@ class HASentenceManagerEditor extends HTMLElement {
         <p>Basic card configuration. Most settings are managed within the card interface.</p>
         <div style="margin: 20px 0;">
           <label style="display: block; margin-bottom: 10px;">
-            Title:
+            <span data-label="title">Title:</span>
             <input type="text" id="title" style="box-sizing:border-box;min-height:44px;min-width:44px;max-width:100%;font:inherit;outline-color:var(--primary-color,#1769aa);outline-width:3px;outline-offset:2px;" placeholder="Sentence Manager" value="${_esc(this.config?.title || 'Sentence Manager')}">
           </label>
           <label style="display: block; margin-bottom: 10px;">
-            Language:
+            <span data-label="language">Language:</span>
             <input type="text" id="language" style="box-sizing:border-box;min-height:44px;min-width:44px;max-width:100%;font:inherit;outline-color:var(--primary-color,#1769aa);outline-width:3px;outline-offset:2px;" placeholder="en" value="${_esc(this.config?.language || 'en')}">
           </label>
         </div>
       </div>
     `;
+    this._updateLabels();
     for (const key of ['title', 'language']) {
       this.querySelector(`#${key}`).addEventListener('input', (event) => {
         this.config = { ...this.config, [key]: event.target.value };
