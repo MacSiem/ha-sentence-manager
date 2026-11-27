@@ -27,7 +27,7 @@ for (const lang of ['en', 'pl']) for (const reload of [true, false]) {
       await card._importHaSentencesToEditor();
       assert.deepEqual(writes, ['one', 'two']);
       assert.match(notices.at(-1)[0], lang === 'pl' ? /2.*(zda|zdania)/i : /2.*sentences/i);
-      assert.match(notices.at(-1)[0], reload ? (lang === 'pl' ? /przeładowan.*zakończ/i : /reload.*completed/i) : (lang === 'pl' ? /przeładowan.*nie powiod/i : /reload.*failed/i));
+      assert.match(notices.at(-1)[0], reload ? (lang === 'pl' ? /przeładowan.*zakończ/i : /reload.*completed/i) : (lang === 'pl' ? /nie potwierdzono przeładowan/i : /reload.*not confirmed/i));
       assert.equal(notices.at(-1)[1], reload ? 'success' : 'error');
     } finally { dom.window.close(); }
   });
@@ -82,5 +82,30 @@ test('Assist help does not promise automatic recognition', () => {
     assert.doesNotMatch(source, /After adding custom sentences, HA automatically recognizes them in Assist/);
     assert.doesNotMatch(source, /Po dodaniu custom sentences HA automatycznie rozpoznaje je w Assist/);
     assert.match(source, /check the HA reload result, then test them in Assist/);
+  } finally { dom.window.close(); }
+});
+
+for (const [label, result, expected] of [
+  ['acknowledged', { ok: true }, true],
+  ['explicit false', { ok: false }, false],
+  ['missing ack', {}, false],
+  ['undefined', undefined, false],
+  ['null', null, false],
+]) test(`reload requires explicit success: ${label}`, async () => {
+  const { dom, card } = fixture();
+  try {
+    card._hass.callWS = async request => {
+      assert.equal(request.type, 'ha_sentence_manager/reload');
+      return result;
+    };
+    assert.equal(await card._apiReload(), expected);
+  } finally { dom.window.close(); }
+});
+
+test('reload exception remains unconfirmed', async () => {
+  const { dom, card } = fixture();
+  try {
+    card._hass.callWS = async () => { throw new Error('disconnected'); };
+    assert.equal(await card._apiReload(), false);
   } finally { dom.window.close(); }
 });

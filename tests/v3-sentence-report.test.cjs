@@ -32,7 +32,7 @@ async function fixture(language = 'en') {
   const hass = { language, user: { id: 'synthetic-account', is_admin: true }, connection, themes: {}, config: { language: 'en' }, callWS: async request => {
     requests.push(request);
     if (request.type === 'ha_sentence_manager/list') return stored;
-    if (request.type === 'ha_sentence_manager/reload') return {};
+    if (request.type === 'ha_sentence_manager/reload') return { ok: true };
     if (request.type === 'ha_sentence_manager/create') {
       if (request.sentences[0] === 'synthetic rejected') { const error = new Error('SYNTHETIC_PRIVATE_ERROR'); error.code = 'invalid_payload'; throw error; }
       const row = { id: 'synthetic-' + stored.length, ...request }; stored.push(row); return row;

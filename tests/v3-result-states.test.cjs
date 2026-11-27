@@ -62,7 +62,7 @@ test('partial YAML import lists failed row and retries it without duplicating su
   const stored=[];let failedOnce=false;
   const {dom,card}=fixture(async msg=>{
     if(msg.type==='ha_sentence_manager/list')return stored;
-    if(msg.type==='ha_sentence_manager/reload')return {};
+    if(msg.type==='ha_sentence_manager/reload')return {ok:true};
     assert.equal(msg.type,'ha_sentence_manager/create');
     if(msg.sentences[0]==='synthetic two'&&!failedOnce){failedOnce=true;const error=new Error('private raw payload');error.code='invalid_payload';throw error;}
     stored.push({id:'synthetic-'+stored.length,...msg});return stored.at(-1);

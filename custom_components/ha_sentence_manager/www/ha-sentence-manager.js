@@ -1380,7 +1380,7 @@ class HASentenceManager extends HTMLElement {
   async _apiReload() {
     this._requireSentenceAdmin();
     if (!this._hass) return;
-    try { await this._hass.callWS({ type: 'ha_sentence_manager/reload' }); return true; }
+    try { const result = await this._hass.callWS({ type: 'ha_sentence_manager/reload' }); return result?.ok === true; }
     catch (e) { console.warn('[ha-sentence-manager] reload failed'); return false; }
   }
   async _reloadFromApi({ preserveDrafts = false } = {}) {
@@ -2633,7 +2633,7 @@ class HASentenceManager extends HTMLElement {
       ? (this._lang === 'pl' ? 'Nie zapisano żadnego zdania.' : 'No sentences were saved.')
       : (reloaded
         ? (this._lang === 'pl' ? 'Żądanie przeładowania HA zakończone.' : 'HA reload request completed.')
-        : (this._lang === 'pl' ? 'Przeładowanie HA nie powiodło się.' : 'HA reload failed.'));
+        : (this._lang === 'pl' ? 'Nie potwierdzono przeładowania HA.' : 'HA reload was not confirmed.'));
     const failed = partial ? (this._lang === 'pl' ? ' Nie wszystkie zdania zapisano.' : ' Not all sentences were saved.') : '';
     this.showNotification(`${count}. ${result}${failed}`, created > 0 && reloaded && !partial ? 'success' : 'error');
   }
