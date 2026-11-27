@@ -2561,7 +2561,7 @@ class HASentenceManager extends HTMLElement {
           ${contentHtml}
           <div style="margin-top:20px;padding:16px;background:var(--bento-bg,#f8fafc);border:1px solid var(--bento-border,#e2e8f0);border-radius:10px">
             <h3 style="margin:0 0 8px;font-size:14px">${this._lang === 'pl' ? 'Sterowanie głosowe' : 'Voice Control'}</h3>
-            <p style="margin:0 0 8px;font-size:12px;color:var(--bento-text-secondary,#64748B)">${this._lang === 'pl' ? 'Po dodaniu custom sentences HA automatycznie rozpoznaje je w Assist.' : 'After adding custom sentences, HA automatically recognizes them in Assist.'}</p>
+            <p style="margin:0 0 8px;font-size:12px;color:var(--bento-text-secondary,#64748B)">${this._lang === 'pl' ? 'Po dodaniu zdań sprawdź wynik przeładowania HA, a następnie przetestuj je w Assist.' : 'After adding sentences, check the HA reload result, then test them in Assist.'}</p>
             <details>
               <summary style="cursor:pointer;font-weight:600;font-size:12px;color:var(--bento-primary,#3B82F6)">${this._lang === 'pl' ? 'Przykłady komend + konfiguracja' : 'Example commands + configuration'}</summary>
               <div style="margin-top:8px;font-size:12px;line-height:1.8;color:var(--bento-text-secondary,#64748B)">
@@ -2625,9 +2625,17 @@ class HASentenceManager extends HTMLElement {
     if (epoch !== this._dataEpoch) return;
     await this._reloadFromApi();
     if (epoch !== this._dataEpoch) return;
-    await this._apiReload();
+    const reloaded = created > 0 ? await this._apiReload() : false;
     if (epoch !== this._dataEpoch) return;
-    this.showNotification(this._lang === 'pl' ? `Zaimportowano ${created} zdań z HA` : `Imported ${created} sentences from HA`, 'success');
+    const partial = created < toCreate.length;
+    const count = this._lang === 'pl' ? `Zaimportowano ${created} zdań z HA` : `Imported ${created} sentences from HA`;
+    const result = created === 0
+      ? (this._lang === 'pl' ? 'Nie zapisano żadnego zdania.' : 'No sentences were saved.')
+      : (reloaded
+        ? (this._lang === 'pl' ? 'Żądanie przeładowania HA zakończone.' : 'HA reload request completed.')
+        : (this._lang === 'pl' ? 'Przeładowanie HA nie powiodło się.' : 'HA reload failed.'));
+    const failed = partial ? (this._lang === 'pl' ? ' Nie wszystkie zdania zapisano.' : ' Not all sentences were saved.') : '';
+    this.showNotification(`${count}. ${result}${failed}`, created > 0 && reloaded && !partial ? 'success' : 'error');
   }
 
   // v5: the v4 "auto-detect" path fired real `conversation/process`
