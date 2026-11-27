@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.1.1 (candidate 2026-11-27)
+
+- Reject a symlinked custom sentences root before accessing managed files.
+- Preserve newer editor drafts when an earlier save completes, and show sentence reload outcomes separately from saved or deleted entries.
+- Require an explicit successful reload acknowledgement; report partial or unconfirmed imports without claiming automatic Assist recognition.
+- Improve intent labels, the tab layout and the initially collapsed help section.
+
 ## 5.1.0 (2026-10-15)
 
 - Keep the voice-command and local-pattern fields readable in narrow cards by wrapping their actions instead of squeezing the input.

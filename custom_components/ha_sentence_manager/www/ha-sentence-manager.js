@@ -1,4 +1,4 @@
-/* HA Tools split — ha-sentence-manager v5.1.0 (2026-10-15) — uses ha_sentence_manager integration via WS API */
+/* HA Tools split — ha-sentence-manager v5.1.1 (candidate 2026-11-27) — uses ha_sentence_manager integration via WS API */
 (function() {
 'use strict';
 
@@ -2186,8 +2186,8 @@ class HASentenceManager extends HTMLElement {
     const reloaded = await this._apiReload();
     if (epoch !== this._dataEpoch) return;
     this.showNotification(this._lang === 'pl'
-      ? (reloaded ? 'Zdanie zapisane. Żądanie przeładowania HA zakończone.' : 'Zdanie zapisane, ale przeładowanie HA nie powiodło się.')
-      : (reloaded ? 'Sentence saved. HA reload request completed.' : 'Sentence saved, but HA reload failed.'),
+      ? (reloaded ? 'Zdanie zapisane. Żądanie przeładowania HA zakończone.' : 'Zdanie zapisane, ale nie potwierdzono przeładowania HA.')
+      : (reloaded ? 'Sentence saved. HA reload request completed.' : 'Sentence saved, but HA reload is unconfirmed.'),
       reloaded ? 'success' : 'error');
   }
 
@@ -2267,8 +2267,8 @@ class HASentenceManager extends HTMLElement {
     const reloaded = await this._apiReload();
     if (epoch !== this._dataEpoch) return;
     this.showNotification(this._lang === 'pl'
-      ? (reloaded ? 'Zdanie usunięte. Żądanie przeładowania HA zakończone.' : 'Zdanie usunięte, ale przeładowanie HA nie powiodło się.')
-      : (reloaded ? 'Sentence deleted. HA reload request completed.' : 'Sentence deleted, but HA reload failed.'),
+      ? (reloaded ? 'Zdanie usunięte. Żądanie przeładowania HA zakończone.' : 'Zdanie usunięte, ale nie potwierdzono przeładowania HA.')
+      : (reloaded ? 'Sentence deleted. HA reload request completed.' : 'Sentence deleted, but HA reload is unconfirmed.'),
       reloaded ? 'success' : 'error');
   }
 

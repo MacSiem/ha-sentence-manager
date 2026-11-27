@@ -59,9 +59,11 @@ If it is absent from your HACS catalog, refresh HACS or add `https://github.com/
 
 If you previously installed v4 as a Lovelace plugin, the integration preserves that existing resource to avoid loading the element twice. To migrate to the bundled card, remove the old `/local/community/ha-sentence-manager/ha-sentence-manager.js` resource entry under *Dashboards → Resources* — it's superseded by the integration-served `/ha_sentence_manager/ha-sentence-manager.js`.
 
-## Upgrade from 5.0.14
+## Upgrade from 5.1.0
 
 Home Assistant 2025.2 or later is required. Back up `custom_sentences/`, including dot-prefixed metadata files, then update the integration through HACS and restart Home Assistant to load the new Python modules. Existing sentence definitions and legacy IDs are retained. Refresh the browser after restart; the owned resource uses a versioned URL. Existing external card resources are preserved and must be migrated explicitly if they still point to an older card.
+
+To roll back to 5.1.0, install that version through HACS, then stop Home Assistant before changing files. Preserve the current `custom_sentences/` directory as a separate backup, including each sentence YAML and its matching dot-prefixed `.ha_sentence_manager_*.meta.yaml` sidecar. Restore the matching pre-upgrade YAML and sidecars together if reverting data is necessary, then start Home Assistant. Refresh the browser and verify the resource and your sentences. Restoring the earlier backup also reverts later sentence edits; keep the current backup for recovery.
 
 The server serializes its own executor operations, including writes pending across config-entry reload. Revision checks detect files changed since the last read. They do not provide an atomic compare-and-swap guarantee against an independent process editing files during the check/write interval; avoid simultaneous external file writes. If a stale edit is rejected, reload and review the newer text before saving again.
 
