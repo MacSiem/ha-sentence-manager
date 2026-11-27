@@ -340,7 +340,7 @@ test('Escape restores report opener focus; detach removes dialog and transport l
     f.report().querySelector('dialog').dispatchEvent(new f.window.Event('cancel', {cancelable:true}));
     assert.equal(f.report(), undefined);
     assert.equal(f.card.shadowRoot.activeElement?.id, 'download-sentence-report-btn');
-    await f.open(); f.card.remove();
+    await f.open(); f.card.remove(); await Promise.resolve();
     assert.equal(f.report(), undefined);
     for (const handlers of f.listeners.values()) assert.equal(handlers.size, 0);
     assert.deepEqual(f.downloads, []);

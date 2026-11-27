@@ -1127,7 +1127,7 @@ class HASentenceManager extends HTMLElement {
         this._autoDetectRan = true;
         const epoch = this._dataEpoch;
         this._detectTimer = setTimeout(() => {
-          if (epoch === this._dataEpoch && this._hass) this._autoDetectIntents();
+          if (!this._disconnectPending && epoch === this._dataEpoch && this._hass) this._autoDetectIntents();
         }, 500);
       }
       return;
@@ -1346,7 +1346,7 @@ class HASentenceManager extends HTMLElement {
   // Sentences live in HA's `custom_sentences/<lang>/ha_sentence_manager_<intent>.yaml`.
   // No browser localStorage for application data: every create/update/delete
   // round-trips through the companion Python integration, which is the source of truth.
-  _canManageSentences() { return this._hass?.user?.is_admin === true; }
+  _canManageSentences() { return !this._disconnectPending && this._hass?.user?.is_admin === true; }
 
   _sentenceAdminMessage() {
     return this._lang === 'pl'
@@ -1401,11 +1401,11 @@ class HASentenceManager extends HTMLElement {
     let items;
     try {
       items = await this._apiList(this._currentLanguage || null);
-      if (epoch !== this._dataEpoch || !this._hass) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch || !this._hass) return;
       this._sentenceReadsPending--;
       this._apiError = null;
     } catch (e) {
-      if (epoch !== this._dataEpoch || !this._hass) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch || !this._hass) return;
       this._sentenceReadsPending--;
       this._apiError = e.message || String(e);
       preserveDrafts ? this._renderLocalePreservingDrafts() : this.render();
@@ -1459,7 +1459,7 @@ class HASentenceManager extends HTMLElement {
     this.render();
     try {
       const items = await this._apiList(null);
-      if (epoch !== this._dataEpoch || !this._hass) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch || !this._hass) return;
       this._apiError = null;
       const grouped = { language: this.config.language || null, intents: Object.create(null), lists: Object.create(null) };
       for (const item of (items || [])) {
@@ -1469,7 +1469,7 @@ class HASentenceManager extends HTMLElement {
       }
       this._haSentences = Object.keys(grouped.intents).length ? grouped : null;
     } catch (e) {
-      if (epoch !== this._dataEpoch || !this._hass) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch || !this._hass) return;
       this._haSentencesError = e && e.message ? e.message : String(e);
       this._apiError = this._haSentencesError;
       this._haSentences = null;
@@ -1557,7 +1557,7 @@ class HASentenceManager extends HTMLElement {
       const lang = this.config.language || this._hass.config?.language || 'en';
       const result = await this._hass.callWS({ type: 'conversation/process', text: text.trim(), language: lang, agent_id: 'conversation.home_assistant' });
       this._syncSentenceReportState();
-      if (epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch || !this._hass) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch || !this._hass) return;
       const response = result?.response;
       const data = response?.data;
       const responseType = typeof response?.response_type === 'string' ? response.response_type : 'unknown';
@@ -1578,7 +1578,7 @@ class HASentenceManager extends HTMLElement {
       };
     } catch (e) {
       this._syncSentenceReportState();
-      if (epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch || !this._hass) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch || !this._hass) return;
       this._testResultHA = { status: 'error', success: false, input: text, error: this._lang === 'pl' ? 'Nie otrzymano prawidłowej odpowiedzi z HA.' : 'No valid response was received from HA.' };
     }
     this._testLoading = false;
@@ -1657,10 +1657,10 @@ class HASentenceManager extends HTMLElement {
           throw new Error('Clipboard copy was not confirmed');
         }
       }
-      if (epoch !== this._dataEpoch) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch) return;
       this.showNotification(this._lang === 'pl' ? 'YAML skopiowany do schowka' : 'YAML copied to clipboard', 'success');
     } catch (_) {
-      if (epoch !== this._dataEpoch) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch) return;
       this.showNotification(this._lang === 'pl'
         ? 'Nie można skopiować do schowka. Zaznacz i skopiuj widoczny YAML.'
         : 'Could not copy to the clipboard. Select and copy the displayed YAML.', 'error');
@@ -1921,7 +1921,7 @@ class HASentenceManager extends HTMLElement {
 
   _performSentenceReportDownload({ blob, filename, format, context, signal }) {
     const current = this._getSentenceReportContext();
-    if (signal.aborted || format !== 'json' || !this._sentenceReportAvailable() ||
+    if (this._disconnectPending || signal.aborted || format !== 'json' || !this._sentenceReportAvailable() ||
         ['role', 'userId', 'connectionId', 'datasetId', 'revision'].some(key => current[key] !== context[key])) throw new Error('Report context changed');
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.hidden = true;
@@ -2007,7 +2007,7 @@ class HASentenceManager extends HTMLElement {
       await this._runSentenceImport(rows);
 
     } catch (error) {
-      if (epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch || reportEpoch !== this._reportSourceEpoch) return;
       this._importResult = { epoch, status: 'error', total: 0, created: 0, failed: [], parseFailed: true };
       this.render();
       this.showNotification(this._lang === 'pl' ? 'Błąd importu YAML' : 'Error importing YAML', 'error');
@@ -2085,7 +2085,7 @@ class HASentenceManager extends HTMLElement {
   async retryImportFailed() {
     const result = this._importResult;
     const reportEpoch = this._reportSourceEpoch;
-    if (!result || result.epoch !== this._dataEpoch || !this._canManageSentences() || this._importBusy || !result.failed.length) return;
+    if (!result || this._disconnectPending || result.epoch !== this._dataEpoch || !this._canManageSentences() || this._importBusy || !result.failed.length) return;
     // One busy interval owns reconciliation, creates and final read/reload.
     await this._runSentenceImport(result.failed, true);
   }
@@ -2175,22 +2175,22 @@ class HASentenceManager extends HTMLElement {
         });
       }
     } catch (e) {
-      if (epoch !== this._dataEpoch) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch) return;
       console.warn('[ha-sentence-manager] saveSentence failed', e);
       this.showNotification(`${this._lang === 'pl' ? 'Zapis nie powiódł się' : 'Save failed'}: ${e.message || e}`, 'error');
       return;
     }
 
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     // A newer draft must retain both its fields and its original edit revision.
     if (draft === this._sentenceDraftSnapshot()) {
       this.clearForm();
-      if (epoch !== this._dataEpoch) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch) return;
       await this._reloadFromApi({ preserveDrafts: true });
     }
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     const reloaded = await this._apiReload();
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     this.showNotification(this._lang === 'pl'
       ? (reloaded ? 'Zdanie zapisane. Żądanie przeładowania HA zakończone.' : 'Zdanie zapisane, ale nie potwierdzono przeładowania HA.')
       : (reloaded ? 'Sentence saved. HA reload request completed.' : 'Sentence saved, but HA reload is unconfirmed.'),
@@ -2262,16 +2262,16 @@ class HASentenceManager extends HTMLElement {
         throw new Error(this._lang === 'pl' ? 'serwer nie znalazł zdania do usunięcia' : 'server could not find the sentence to delete');
       }
     } catch (e) {
-      if (epoch !== this._dataEpoch) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch) return;
       console.warn('[ha-sentence-manager] deleteSentence failed', e);
       this.showNotification(`${this._lang === 'pl' ? 'Usuwanie nie powiodło się' : 'Delete failed'}: ${e.message || e}`, 'error');
       return;
     }
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     await this._reloadFromApi();
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     const reloaded = await this._apiReload();
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     this.showNotification(this._lang === 'pl'
       ? (reloaded ? 'Zdanie usunięte. Żądanie przeładowania HA zakończone.' : 'Zdanie usunięte, ale nie potwierdzono przeładowania HA.')
       : (reloaded ? 'Sentence deleted. HA reload request completed.' : 'Sentence deleted, but HA reload is unconfirmed.'),
@@ -2615,7 +2615,7 @@ class HASentenceManager extends HTMLElement {
     }
     let created = 0;
     for (const item of toCreate) {
-      if (epoch !== this._dataEpoch) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch) return;
       try {
         await this._apiCreate({
           language,
@@ -2626,15 +2626,15 @@ class HASentenceManager extends HTMLElement {
         });
         created++;
       } catch (e) {
-      if (epoch !== this._dataEpoch) return;
+      if (this._disconnectPending || epoch !== this._dataEpoch) return;
         console.warn('[ha-sentence-manager] HA-import row failed', e, item);
       }
     }
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     await this._reloadFromApi();
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     const reloaded = created > 0 ? await this._apiReload() : false;
-    if (epoch !== this._dataEpoch) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch) return;
     const partial = created < toCreate.length;
     const count = this._lang === 'pl' ? `Zaimportowano ${created} zdań z HA` : `Imported ${created} sentences from HA`;
     const result = created === 0
@@ -2734,7 +2734,7 @@ class HASentenceManager extends HTMLElement {
   async _retrySentenceReads() {
     const epoch = this._dataEpoch;
     await this._reloadFromApi();
-    if (epoch !== this._dataEpoch || !this._hass || this._apiError) return;
+    if (this._disconnectPending || epoch !== this._dataEpoch || !this._hass || this._apiError) return;
     await this._loadHaSentences();
   }
 
@@ -4403,12 +4403,22 @@ ${_RESPONSIVE_CONTROL_CSS}
   }
 
   connectedCallback() {
+    this._disconnectPending = false;
     this._reportDisposed = false;
     this._syncSentenceReportState();
     this._updateSentenceReportAvailability();
   }
 
   disconnectedCallback() {
+    this._disconnectPending = true;
+    // A synchronous DOM move reconnects before this checkpoint; real detaches
+    // still invalidate the session, while pending continuations are fenced above.
+    queueMicrotask(() => {
+      if (!this.isConnected) this._disposeDisconnected();
+    });
+  }
+
+  _disposeDisconnected() {
     this._destroySentenceReport();
     this._tabResizeObserver?.disconnect(); this._tabResizeObserver = null; this._tabContainerWidth = null; this.removeAttribute('data-responsive-tabs-observed');
     this._invalidateSession();

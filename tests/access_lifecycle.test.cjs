@@ -160,3 +160,36 @@ test('pending first read cannot restore an editor draft after role or account ch
     } finally {card.disconnectedCallback();dom.window.close();}
   }
 });
+
+async function connectedMoveFixture() {
+  const dom=new JSDOM('',{runScripts:'dangerously',pretendToBeVisual:true,url:'http://localhost/'});dom.window.scrollTo=()=>{};
+  dom.window.eval(readFileSync('custom_components/ha_sentence_manager/www/ha-sentence-manager.js','utf8'));
+  const left=dom.window.document.createElement('div'),right=dom.window.document.createElement('section');dom.window.document.body.append(left,right);
+  const card=dom.window.document.createElement('ha-sentence-manager');card.currentTab='editor';card.setConfig({});left.append(card);
+  const hass={user:{id:'admin',is_admin:true},language:'en',states:{},themes:{},callWS:async()=>[]};card.hass=hass;
+  await new Promise(resolve=>setImmediate(resolve));card.shadowRoot.querySelector('#trigger-input').value='private draft';return {dom,left,right,card,hass};
+}
+test('moving the same connected card preserves hass, styles and draft without reassignment',async()=>{
+  const {dom,right,card,hass}=await connectedMoveFixture();
+  try {await Promise.resolve().then(()=>right.append(card));await Promise.resolve();assert.equal(card.hass,hass);assert.ok(card.shadowRoot.querySelector('style'));assert.equal(card.shadowRoot.querySelector('#trigger-input').value,'private draft');}
+  finally {card.remove();await Promise.resolve();dom.window.close();}
+});
+test('permanent disconnect invalidates pending read and clears private state',async()=>{
+  const {dom,card,hass}=await connectedMoveFixture();let release;
+  try {hass.callWS=()=>new Promise(resolve=>{release=resolve;});const read=card._reloadFromApi();card.remove();await Promise.resolve();release([{id:'old',intent:'Old',sentences:['secret']}]);await read;assert.equal(card.hass,null);assert.equal(card.shadowRoot.children.length,0);assert.equal(card.sentences.length,0);}
+  finally {dom.window.close();}
+});
+test('queued save completion cannot start a reload while the card is detached',async()=>{
+  const {dom,card,hass}=await connectedMoveFixture();let reloads=0,clears=0;
+  try {card.shadowRoot.querySelector('#intent-input').value='QA';hass.callWS=()=>dom.window.Promise.resolve({ok:true});card._reloadFromApi=async()=>{reloads++;};card._apiReload=async()=>{reloads++;};const clear=card.clearForm.bind(card);card.clearForm=()=>{clears++;clear();};const save=card.saveSentence();await Promise.resolve();card.remove();await save;await Promise.resolve();assert.equal(reloads,0);assert.equal(clears,0);assert.equal(card.hass,null);}
+  finally {dom.window.close();}
+});
+test('identity or role change after a move clears the private draft',async()=>{
+  for(const change of ['account','role']) {const {dom,right,card,hass}=await connectedMoveFixture();try {right.append(card);card.hass={...hass,user:change==='role'?{id:'admin',is_admin:false}:{id:'other',is_admin:true}};assert.notEqual(card.shadowRoot.querySelector('#trigger-input')?.value,'private draft');await Promise.resolve();assert.notEqual(card.shadowRoot.querySelector('#trigger-input')?.value,'private draft');}finally{card.remove();await Promise.resolve();dom.window.close();}}
+});
+
+test('pending list survives a synchronous move and retains the draft',async()=>{
+  const {dom,right,card,hass}=await connectedMoveFixture();let release;
+  try {hass.callWS=()=>new Promise(resolve=>{release=resolve;});const read=card._reloadFromApi({preserveDrafts:true});right.append(card);release([{id:'ok',intent:'QA',sentences:['stored']}]);await read;await Promise.resolve();assert.equal(card.sentences[0].trigger,'stored');assert.equal(card.shadowRoot.querySelector('#trigger-input').value,'private draft');}
+  finally {card.remove();await Promise.resolve();dom.window.close();}
+});
