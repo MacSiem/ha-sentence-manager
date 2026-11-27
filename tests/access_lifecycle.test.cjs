@@ -95,3 +95,26 @@ test('save completion after disconnect cannot append a stale success notice',asy
     assert.equal(notices.length,0);assert.equal(card.shadowRoot.children.length,0);
   } finally {dom.window.close();}
 });
+
+test('same non-admin hass restores the card after a temporary missing hass',async()=>{
+  const {dom,card,hass}=fixture();let release;
+  try {
+    hass.user.is_admin=false;card.hass=hass;
+    hass.callWS=()=>new Promise(resolve=>{release=resolve;});
+    card.hass=null;card.hass=hass;
+    assert.ok(card.shadowRoot.querySelector('.card'));
+    assert.ok(card.shadowRoot.querySelector('style'));
+  } finally {if (release) release([]);await new Promise(resolve=>setImmediate(resolve));card.disconnectedCallback();dom.window.close();}
+});
+
+test('disconnect and reconnect restores card styles while invalidating the old read',async()=>{
+  const {dom,card,hass}=fixture();let release;let calls=0;
+  try {
+    hass.callWS=()=>++calls===1?new Promise(resolve=>{release=resolve;}):Promise.resolve([]);
+    const stale=card._reloadFromApi();card.disconnectedCallback();card.connectedCallback();card.hass=hass;
+    assert.ok(card.shadowRoot.querySelector('.card'));
+    assert.ok(card.shadowRoot.querySelector('style'));
+    release([{id:'old',intent:'Old',sentences:['private']}]);await stale;
+    assert.equal(card.sentences.some(row=>row.trigger==='private'),false);
+  } finally {if (release) release([]);await new Promise(resolve=>setImmediate(resolve));card.disconnectedCallback();dom.window.close();}
+});
