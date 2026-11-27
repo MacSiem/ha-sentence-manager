@@ -118,3 +118,45 @@ test('disconnect and reconnect restores card styles while invalidating the old r
     assert.equal(card.sentences.some(row=>row.trigger==='private'),false);
   } finally {if (release) release([]);await new Promise(resolve=>setImmediate(resolve));card.disconnectedCallback();dom.window.close();}
 });
+
+test('first pending list preserves an active editor draft and focus',async()=>{
+  const dom=new JSDOM('',{runScripts:'dangerously',pretendToBeVisual:true,url:'http://localhost/'});let release;
+  dom.window.scrollTo=()=>{};dom.window.prompt=()=> 'room';
+  dom.window.eval(readFileSync('custom_components/ha_sentence_manager/www/ha-sentence-manager.js','utf8'));
+  const card=dom.window.document.createElement('ha-sentence-manager');card.currentTab='editor';card.setConfig({});dom.window.document.body.append(card);
+  const hass={user:{id:'admin',is_admin:true},language:'en',states:{},themes:{},callWS:()=>new Promise(resolve=>{release=resolve;})};
+  try {
+    card.hass=hass;
+    const trigger=card.shadowRoot.querySelector('#trigger-input');trigger.value='switch {room}';trigger.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+    card.shadowRoot.querySelector('#intent-input').value='DraftIntent';card.shadowRoot.querySelector('#response-input').value='draft response';
+    card.shadowRoot.querySelector('#add-slot-btn').click();card.shadowRoot.querySelector('.slot-input').value='kitchen';
+    trigger.focus();trigger.setSelectionRange(2,8,'backward');
+    release([{id:'en:Existing',language:'en',intent:'ExistingIntent',sentences:['existing phrase'],revision:'v1'}]);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(card.sentences[0].intent,'ExistingIntent');
+    const current=card.shadowRoot.querySelector('#trigger-input');
+    assert.equal(current.value,'switch {room}');assert.equal(card.shadowRoot.querySelector('#intent-input').value,'DraftIntent');
+    assert.equal(card.shadowRoot.querySelector('#response-input').value,'draft response');assert.equal(card.shadowRoot.querySelector('.slot-input').value,'kitchen');
+    assert.equal(card.shadowRoot.activeElement,current);assert.equal(current.selectionStart,2);assert.equal(current.selectionEnd,8);assert.equal(current.selectionDirection,'backward');
+  } finally {card.disconnectedCallback();dom.window.close();}
+});
+
+test('pending first read cannot restore an editor draft after role or account change',async()=>{
+  for (const change of ['role','account']) {
+    const dom=new JSDOM('',{runScripts:'dangerously',pretendToBeVisual:true,url:'http://localhost/'});const releases=[];
+    dom.window.scrollTo=()=>{};dom.window.eval(readFileSync('custom_components/ha_sentence_manager/www/ha-sentence-manager.js','utf8'));
+    const card=dom.window.document.createElement('ha-sentence-manager');card.currentTab='editor';card.setConfig({});dom.window.document.body.append(card);
+    const hass={user:{id:'admin',is_admin:true},language:'en',states:{},themes:{},callWS:()=>new Promise(resolve=>releases.push(resolve))};
+    try {
+      card.hass=hass;card.shadowRoot.querySelector('#trigger-input').value='private draft';
+      card.hass={...hass,user:change==='role'?{id:'admin',is_admin:false}:{id:'other',is_admin:true}};
+      releases[0]([{id:'old',intent:'Old',sentences:['private row']}]);
+      await new Promise(resolve=>setImmediate(resolve));
+      assert.equal(card.sentences.some(row=>row.trigger==='private row'),false);
+      assert.notEqual(card.shadowRoot.querySelector('#trigger-input')?.value,'private draft');
+      for (const release of releases.slice(1)) release([]);
+      await new Promise(resolve=>setImmediate(resolve));
+      assert.notEqual(card.shadowRoot.querySelector('#trigger-input')?.value,'private draft');
+    } finally {card.disconnectedCallback();dom.window.close();}
+  }
+});

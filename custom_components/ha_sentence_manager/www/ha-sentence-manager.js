@@ -1101,6 +1101,7 @@ class HASentenceManager extends HTMLElement {
     const identityChanged = this._sentenceUserId !== undefined && this._sentenceUserId !== hass?.user?.id;
     if ((prevHass && permissionsChanged) || identityChanged || !hass) {
       this._invalidateSession(!!hass && !identityChanged && !!prevHass);
+      this._lastHtml = null;
     }
     this._sentenceUserId = hass?.user?.id;
     this._sentenceAdmin = hass?.user?.is_admin === true;
@@ -1115,7 +1116,7 @@ class HASentenceManager extends HTMLElement {
     if (!this._sentencesLoaded) {
       // Load persisted sentences from the integration once HA is connected.
       this._sentencesLoaded = true;
-      this._reloadFromApi();
+      this._reloadFromApi({ preserveDrafts: true });
     }
     if (!this._firstHassRender) {
       this._firstHassRender = true;
