@@ -7,6 +7,7 @@
 - Require an explicit successful reload acknowledgement; report partial or unconfirmed imports without claiming automatic Assist recognition.
 - Improve intent labels, the tab layout and the initially collapsed help section.
 - Restore the card after Home Assistant temporarily disconnects and retain its styles when the dashboard remounts it.
+- Keep editor input and focus while the initial sentence list loads, and clear the previous editor draft when the signed-in account changes.
 
 ## 5.1.0 (2026-10-15)
 
