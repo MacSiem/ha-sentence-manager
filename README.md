@@ -13,7 +13,7 @@ Manage Home Assistant Assist custom sentences (intents, slots, responses) from a
 1. **Server-side storage.** Every sentence is one entry in a YAML file at `<config>/custom_sentences/<lang>/ha_sentence_manager_<intent>.yaml` — HA's own location for Assist custom sentences, so it's covered by standard HA backups and shared across every browser/device.
 2. **The card is bundled and auto-registered.** The integration serves `ha-sentence-manager.js`, registers one Lovelace resource in storage mode and an administrator-only sidebar panel. YAML mode uses Home Assistant's frontend fallback.
 3. **Stable ids without polluting the schema.** Each entry gets an opaque id tracked in a sidecar `.ha_sentence_manager_<intent>.meta.yaml` file. Keep the YAML and sidecar together in backups. Fingerprints retain IDs for unchanged rows after manual reordering; missing sidecars receive new IDs. Before/after metadata snapshots recover the matching IDs if a write stops before or after the main YAML replacement. The main YAML contains only Home Assistant sentence definitions. Treat IDs as opaque; new IDs also support intent names containing colons, while existing IDs remain valid.
-4. **Auto-reload.** After a successful create/update/delete, the card requests `conversation.reload` so edits take effect immediately, without a HA restart.
+4. **Auto-reload.** After a successful create/update/delete, the card requests `conversation.reload` without a HA restart. A completed reload request does not verify that Assist recognizes every sentence; use the Test tab to check a phrase.
 5. **Read is open, write is admin-only.** The `ha_sentence_manager/list` WebSocket command has no admin requirement, so the card renders and is browsable for every logged-in user. `create` / `update` / `delete` / `reload` are decorated with `@websocket_api.require_admin` because they change HA's conversation configuration on disk.
 6. **Concurrent edits are checked.** The card sends the YAML file revision with update/delete requests. If the file changed after you opened the card, the server rejects the stale request so you can reload and review the newer text. Writes use a temporary file and atomic replace, keeping the previous YAML intact if serialization fails.
 
@@ -106,7 +106,7 @@ Consumed by the bundled card; useful if you're scripting against it directly.
 | `ha_sentence_manager/create` | Admin | Creates an entry from `{language, intent, sentences, slots, response}`, returns `{id}`. |
 | `ha_sentence_manager/update` | Admin | Patches `sentences` / `slots` / `response` on `sentence_id` via `patch`, with the last-read `revision`; returns `{ok}`. |
 | `ha_sentence_manager/delete` | Admin | Removes `sentence_id` using the last-read `revision` (and its file, if it was the last entry); returns `{ok}`. |
-| `ha_sentence_manager/reload` | Admin | Triggers `conversation.reload`, returns `{ok}`. |
+| `ha_sentence_manager/reload` | Admin | Calls `conversation.reload`; returns `{ok: true}` when the request completes without an exception, or a WebSocket error if it fails. This does not verify Assist recognition. |
 
 A persisted entry becomes a plain HA `custom_sentences` YAML file — for example, `ha_sentence_manager/create` with `{language: "en", intent: "HassLightSet", sentences: ["Turn on the {area} lights"], slots: {area: "string"}, response: "default"}` is written to `custom_sentences/en/ha_sentence_manager_HassLightSet.yaml` as:
 
