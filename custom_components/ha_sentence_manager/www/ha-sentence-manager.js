@@ -1371,7 +1371,7 @@ class HASentenceManager extends HTMLElement {
     try { await this._hass.callWS({ type: 'ha_sentence_manager/reload' }); return true; }
     catch (e) { console.warn('[ha-sentence-manager] reload failed'); return false; }
   }
-  async _reloadFromApi() {
+  async _reloadFromApi({ preserveDrafts = false } = {}) {
     // Map server entries → card row model. Server returns
     //   {id, language, intent, sentences:[...], slots, response}
     // The card UI works on a single trigger phrase per row; when a server entry
@@ -1390,7 +1390,7 @@ class HASentenceManager extends HTMLElement {
       if (epoch !== this._dataEpoch || !this._hass) return;
       this._sentenceReadsPending--;
       this._apiError = e.message || String(e);
-      this.render();
+      preserveDrafts ? this._renderLocalePreservingDrafts() : this.render();
       return;
     }
     this.sentences = items.map(item => ({
@@ -1403,7 +1403,7 @@ class HASentenceManager extends HTMLElement {
       response: item.response || '',
       _allSentences: Array.isArray(item.sentences) ? item.sentences.slice() : [],
     }));
-    this.render();
+    preserveDrafts ? this._renderLocalePreservingDrafts() : this.render();
   }
   _integrationMissingHint() {
     return this._lang === 'pl'
@@ -2092,8 +2092,27 @@ class HASentenceManager extends HTMLElement {
   }
 
   async saveSentence() {
+    if (this._sentenceSavePending) return;
+    this._sentenceSavePending = true;
+    try { return await this._saveSentenceOnce(); }
+    finally { this._sentenceSavePending = false; }
+  }
+
+  _sentenceDraftSnapshot() {
+    const root = this.shadowRoot;
+    const trigger = root?.querySelector('#trigger-input');
+    const intent = root?.querySelector('#intent-input');
+    const response = root?.querySelector('#response-input');
+    if (!trigger || !intent || !response) return null;
+    return JSON.stringify({ editingId: this.editingId, language: this._currentLanguage,
+      trigger: trigger.value, intent: intent.value, response: response.value,
+      slots: Array.from(root.querySelectorAll('.slot-input'), input => [input.dataset.slotName, input.value]) });
+  }
+
+  async _saveSentenceOnce() {
     if (!this._canManageSentences()) { this.showNotification(this._sentenceAdminMessage(), 'info'); return; }
     const epoch = this._dataEpoch;
+    const draft = this._sentenceDraftSnapshot();
     const trigger = this.shadowRoot.querySelector('#trigger-input').value.trim();
     const intent = this.shadowRoot.querySelector('#intent-input').value.trim();
     const response = this.shadowRoot.querySelector('#response-input').value.trim();
@@ -2145,11 +2164,12 @@ class HASentenceManager extends HTMLElement {
     }
 
     if (epoch !== this._dataEpoch) return;
-    this.editingId = null;
-    this.editingIndex = null;
-    this.clearForm();
-    if (epoch !== this._dataEpoch) return;
-    await this._reloadFromApi();
+    // A newer draft must retain both its fields and its original edit revision.
+    if (draft === this._sentenceDraftSnapshot()) {
+      this.clearForm();
+      if (epoch !== this._dataEpoch) return;
+      await this._reloadFromApi({ preserveDrafts: true });
+    }
     if (epoch !== this._dataEpoch) return;
     await this._apiReload();
     if (epoch !== this._dataEpoch) return;
