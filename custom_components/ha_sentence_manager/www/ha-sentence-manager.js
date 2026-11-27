@@ -1043,6 +1043,7 @@ class HASentenceManager extends HTMLElement {
     this._lastRenderTime = 0;
     this._renderScheduled = false;
     this._firstHassRender = false;
+    this._disconnectPending = false;
     // --- Pagination ---
     this._currentPage = {};
     this._pageSize = 15;
@@ -2085,7 +2086,7 @@ class HASentenceManager extends HTMLElement {
   async retryImportFailed() {
     const result = this._importResult;
     const reportEpoch = this._reportSourceEpoch;
-    if (!result || this._disconnectPending || result.epoch !== this._dataEpoch || !this._canManageSentences() || this._importBusy || !result.failed.length) return;
+    if (!result || result.epoch !== this._dataEpoch || !this._canManageSentences() || this._importBusy || !result.failed.length) return;
     // One busy interval owns reconciliation, creates and final read/reload.
     await this._runSentenceImport(result.failed, true);
   }
@@ -2626,7 +2627,7 @@ class HASentenceManager extends HTMLElement {
         });
         created++;
       } catch (e) {
-      if (this._disconnectPending || epoch !== this._dataEpoch) return;
+        if (this._disconnectPending || epoch !== this._dataEpoch) return;
         console.warn('[ha-sentence-manager] HA-import row failed', e, item);
       }
     }
