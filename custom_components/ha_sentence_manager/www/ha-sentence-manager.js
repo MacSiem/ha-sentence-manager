@@ -4406,12 +4406,23 @@ ${_RESPONSIVE_CONTROL_CSS}
   connectedCallback() {
     this._disconnectPending = false;
     this._reportDisposed = false;
+    const parent = this.parentElement;
+    if (this._recoverHuiCardHass && !this._hass && parent?.localName === 'hui-card' && parent.isConnected) {
+      const current = parent.hass;
+      if (current && typeof current.callWS === 'function' && typeof current.user?.id === 'string' && typeof current.user?.is_admin === 'boolean') {
+        this.hass = current;
+      }
+    }
+    this._recoverHuiCardHass = false;
+    this._connectedUnderHuiCard = parent?.localName === 'hui-card';
     this._syncSentenceReportState();
     this._updateSentenceReportAvailability();
+    if (this.shadowRoot?.querySelector('.card')) _bindResponsiveTabs(this);
   }
 
   disconnectedCallback() {
     this._disconnectPending = true;
+    this._tabResizeObserver?.disconnect(); this._tabResizeObserver = null; this._tabContainerWidth = null; this.removeAttribute('data-responsive-tabs-observed');
     // A synchronous DOM move reconnects before this checkpoint; real detaches
     // still invalidate the session, while pending continuations are fenced above.
     queueMicrotask(() => {
@@ -4420,8 +4431,8 @@ ${_RESPONSIVE_CONTROL_CSS}
   }
 
   _disposeDisconnected() {
+    this._recoverHuiCardHass = this._connectedUnderHuiCard;
     this._destroySentenceReport();
-    this._tabResizeObserver?.disconnect(); this._tabResizeObserver = null; this._tabContainerWidth = null; this.removeAttribute('data-responsive-tabs-observed');
     this._invalidateSession();
     this._hass = null;
     this._sentenceUserId = undefined;

@@ -193,3 +193,33 @@ test('pending list survives a synchronous move and retains the draft',async()=>{
   try {hass.callWS=()=>new Promise(resolve=>{release=resolve;});const read=card._reloadFromApi({preserveDrafts:true});right.append(card);release([{id:'ok',intent:'QA',sentences:['stored']}]);await read;await Promise.resolve();assert.equal(card.sentences[0].trigger,'stored');assert.equal(card.shadowRoot.querySelector('#trigger-input').value,'private draft');}
   finally {card.remove();await Promise.resolve();dom.window.close();}
 });
+
+test('same card recovers current hui-card hass after a real reparent gap',async()=>{
+  const {dom,left,right,card,hass}=await connectedMoveFixture();let release;
+  try {
+    const wrapper=dom.window.document.createElement('hui-card');wrapper.hass=hass;left.append(wrapper);wrapper.append(card);
+    hass.callWS=()=>new Promise(resolve=>{release=resolve;});const stale=card._reloadFromApi();
+    wrapper.remove();await Promise.resolve();assert.equal(card.hass,null);assert.equal(card.shadowRoot.children.length,0);
+    const next={...hass,user:{id:'new-user',is_admin:false},callWS:async()=>[]};wrapper.hass=next;right.append(wrapper);
+    assert.equal(card.hass,next);assert.ok(card.shadowRoot.querySelector('.card'));assert.ok(card.shadowRoot.querySelector('style'));
+    assert.equal(card.shadowRoot.querySelector('#trigger-input'),null);
+    release([{id:'old',intent:'Old',sentences:['private old']}]);await stale;await new Promise(resolve=>setImmediate(resolve));assert.equal(card.sentences.some(row=>row.trigger==='private old'),false);
+  } finally {card.remove();await Promise.resolve();dom.window.close();}
+});
+
+test('reconnect ignores non-hui-card and invalid parent context',async()=>{
+  for(const invalid of ['wrong-parent','missing-user','missing-transport']) {
+    const {dom,left,right,card,hass}=await connectedMoveFixture();
+    try {const wrapper=dom.window.document.createElement('hui-card');wrapper.hass=hass;left.append(wrapper);wrapper.append(card);wrapper.remove();await Promise.resolve();
+      if(invalid==='wrong-parent')right.append(card);
+      else {wrapper.hass=invalid==='missing-user'?{callWS:async()=>[]}:{user:{id:'x',is_admin:true}};right.append(wrapper);}
+      assert.equal(card.hass,null);assert.equal(card.shadowRoot.children.length,0);
+    } finally {card.remove();await Promise.resolve();dom.window.close();}
+  }
+});
+
+test('hui-card reconnect reloads same administrator after a microtask without retaining old draft',async()=>{
+  const {dom,left,right,card,hass}=await connectedMoveFixture();
+  try {const wrapper=dom.window.document.createElement('hui-card');wrapper.hass=hass;left.append(wrapper);wrapper.append(card);wrapper.remove();await Promise.resolve();right.append(wrapper);assert.equal(card.hass,hass);assert.ok(card.shadowRoot.querySelector('style'));assert.equal(card.shadowRoot.querySelector('#trigger-input').value,'');await new Promise(resolve=>setImmediate(resolve));assert.equal(card.shadowRoot.querySelector('#trigger-input').value,'');}
+  finally {card.remove();await Promise.resolve();dom.window.close();}
+});
