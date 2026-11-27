@@ -968,7 +968,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,s
   outline:3px solid var(--primary-color,#1769aa) !important;outline-offset:2px;
 }
 .tabs { flex-wrap:nowrap !important;overflow-x:auto !important;min-width:0;max-width:100%; }
-.tabs button[data-tab] { min-width:44px !important;min-height:44px !important;white-space:normal !important;overflow-wrap:anywhere;max-width:100%; }
+.tabs button[data-tab] { flex:0 0 auto;min-width:44px !important;min-height:44px !important;white-space:nowrap !important;overflow-wrap:normal;word-break:normal;max-width:none; }
 .ht-tab-picker { display:none;min-width:0;gap:6px;margin:0 0 16px; }
 .ht-tab-picker select { width:100%;font:inherit;color:var(--primary-text-color,inherit);background:var(--card-background-color,transparent);padding:8px;border:1px solid var(--divider-color,#aaa);border-radius:8px; }
 .tabs[hidden],.ht-tab-picker[hidden] { display:none !important; }

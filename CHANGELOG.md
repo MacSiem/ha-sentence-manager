@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.1.1 (candidate 2026-11-27)
+## 5.1.1 (2026-11-27)
 
 - Reject a symlinked custom sentences root before accessing managed files.
 - Preserve newer editor drafts when an earlier save completes, and show sentence reload outcomes separately from saved or deleted entries.
