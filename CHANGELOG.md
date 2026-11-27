@@ -6,6 +6,7 @@
 - Preserve newer editor drafts when an earlier save completes, and show sentence reload outcomes separately from saved or deleted entries.
 - Require an explicit successful reload acknowledgement; report partial or unconfirmed imports without claiming automatic Assist recognition.
 - Improve intent labels, the tab layout and the initially collapsed help section.
+- Restore the card after Home Assistant temporarily disconnects and retain its styles when the dashboard remounts it.
 
 ## 5.1.0 (2026-10-15)
 

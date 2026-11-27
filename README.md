@@ -65,6 +65,8 @@ Home Assistant 2025.2 or later is required. Back up `custom_sentences/`, includi
 
 To roll back to 5.1.0, install that version through HACS, then stop Home Assistant before changing files. Preserve the current `custom_sentences/` directory as a separate backup, including each sentence YAML and its matching dot-prefixed `.ha_sentence_manager_*.meta.yaml` sidecar. Restore the matching pre-upgrade YAML and sidecars together if reverting data is necessary, then start Home Assistant. Refresh the browser and verify the resource and your sentences. Restoring the earlier backup also reverts later sentence edits; keep the current backup for recovery.
 
+Keep `<config>/custom_sentences/` as a real directory inside the Home Assistant configuration. If the current directory is a symbolic link, back up its target and move the sentences and dot-prefixed metadata into a real directory before upgrading.
+
 The server serializes its own executor operations, including writes pending across config-entry reload. Revision checks detect files changed since the last read. They do not provide an atomic compare-and-swap guarantee against an independent process editing files during the check/write interval; avoid simultaneous external file writes. If a stale edit is rejected, reload and review the newer text before saving again.
 
 ## Quick start

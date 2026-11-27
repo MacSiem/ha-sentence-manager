@@ -1106,7 +1106,12 @@ class HASentenceManager extends HTMLElement {
     this._sentenceAdmin = hass?.user?.is_admin === true;
     this._hass = hass;
     this._syncSentenceReportState();
-    if (!hass) { this._destroySentenceReport(); this._firstHassRender = false; this.shadowRoot?.replaceChildren(); return; }
+    if (!hass) {
+      this._destroySentenceReport();
+      this._firstHassRender = false;
+      this.shadowRoot?.replaceChildren();
+      return;
+    }
     if (!this._sentencesLoaded) {
       // Load persisted sentences from the integration once HA is connected.
       this._sentencesLoaded = true;
