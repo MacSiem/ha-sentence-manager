@@ -1457,7 +1457,7 @@ class HASentenceManager extends HTMLElement {
     const epoch = this._dataEpoch;
     this._haSentencesLoading = true;
     this._haSentencesError = null;
-    this.render();
+    this._renderLocalePreservingDrafts();
     try {
       const items = await this._apiList(null);
       if (this._disconnectPending || epoch !== this._dataEpoch || !this._hass) return;
@@ -1476,7 +1476,7 @@ class HASentenceManager extends HTMLElement {
       this._haSentences = null;
     }
     this._haSentencesLoading = false;
-    this.render();
+    this._renderLocalePreservingDrafts();
   }
 
   // Parse custom_sentences YAML into structured data

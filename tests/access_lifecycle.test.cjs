@@ -223,3 +223,75 @@ test('hui-card reconnect reloads same administrator after a microtask without re
   try {const wrapper=dom.window.document.createElement('hui-card');wrapper.hass=hass;left.append(wrapper);wrapper.append(card);wrapper.remove();await Promise.resolve();right.append(wrapper);assert.equal(card.hass,hass);assert.ok(card.shadowRoot.querySelector('style'));assert.equal(card.shadowRoot.querySelector('#trigger-input').value,'');await new Promise(resolve=>setImmediate(resolve));assert.equal(card.shadowRoot.querySelector('#trigger-input').value,'');}
   finally {card.remove();await Promise.resolve();dom.window.close();}
 });
+
+for (const phase of ['start', 'completion']) {
+  test(`background HA sentences read preserves the editor draft on ${phase}`, async () => {
+    const {dom, card, hass} = fixture();
+    let release;
+    dom.window.prompt = () => 'room';
+    hass.callWS = () => new Promise(resolve => { release = resolve; });
+    const setDraft = () => {
+      const trigger = card.shadowRoot.querySelector('#trigger-input');
+      trigger.value = 'switch {room}';
+      trigger.dispatchEvent(new dom.window.Event('input', {bubbles: true}));
+      card.shadowRoot.querySelector('#intent-input').value = 'DraftIntent';
+      card.shadowRoot.querySelector('#response-input').value = 'draft response';
+      if (!card.shadowRoot.querySelector('.slot-input')) card.shadowRoot.querySelector('#add-slot-btn').click();
+      card.shadowRoot.querySelector('.slot-input').value = 'kitchen';
+      trigger.focus();
+      trigger.setSelectionRange(2, 8, 'backward');
+    };
+    const assertDraft = () => {
+      const trigger = card.shadowRoot.querySelector('#trigger-input');
+      assert.equal(trigger.value, 'switch {room}');
+      assert.equal(card.shadowRoot.querySelector('#intent-input').value, 'DraftIntent');
+      assert.equal(card.shadowRoot.querySelector('#response-input').value, 'draft response');
+      assert.equal(card.shadowRoot.querySelector('.slot-input').value, 'kitchen');
+      assert.equal(card.shadowRoot.activeElement, trigger);
+      assert.equal(trigger.selectionStart, 2);
+      assert.equal(trigger.selectionEnd, 8);
+      assert.equal(trigger.selectionDirection, 'backward');
+    };
+    try {
+      dom.window.document.body.append(card);
+      setDraft();
+      // Switching tabs invalidates the HTML cache before the delayed auto-detection starts.
+      card._lastHtml = null;
+      const read = card._loadHaSentences();
+      if (phase === 'completion') {
+        setDraft();
+        // Another normal tab change can invalidate the cache while the read is pending.
+        card._lastHtml = null;
+      }
+      else assertDraft();
+      release([{intent: 'ExistingIntent', sentences: ['existing phrase']}]);
+      await read;
+      if (phase === 'completion') assertDraft();
+      assert.equal(card._haSentences.intents.ExistingIntent[0], 'existing phrase');
+    } finally {
+      card.remove();
+      dom.window.close();
+    }
+  });
+}
+
+test('background HA sentences read cannot restore draft after an account change', async () => {
+  const {dom, card, hass} = fixture();
+  const releases = [];
+  hass.callWS = () => new Promise(resolve => { releases.push(resolve); });
+  try {
+    dom.window.document.body.append(card);
+    card._sentenceUserId = 'admin';
+    card.shadowRoot.querySelector('#trigger-input').value = 'private draft';
+    const read = card._loadHaSentences();
+    card.hass = {...hass, user: {id: 'another-admin', is_admin: true}};
+    releases[0]([{intent: 'PrivateIntent', sentences: ['private phrase']}]);
+    for (const release of releases.slice(1)) release([]);
+    await read;
+    assert.notEqual(card.shadowRoot.querySelector('#trigger-input')?.value, 'private draft');
+    assert.equal(card._haSentences, null);
+  } finally {
+    card.remove();
+    dom.window.close();
+  }
+});
