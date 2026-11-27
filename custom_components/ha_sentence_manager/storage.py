@@ -155,7 +155,10 @@ class SentenceStorage:
 
     def _root(self) -> str:
         """Absolute path to the ``custom_sentences`` directory."""
-        return os.path.realpath(self.hass.config.path(CUSTOM_SENTENCES_DIR_NAME))
+        path = self.hass.config.path(CUSTOM_SENTENCES_DIR_NAME)
+        if os.path.islink(path):
+            raise ValueError("custom_sentences root must not be a symlink")
+        return os.path.realpath(path)
 
     @staticmethod
     def _validate_path_component(value: str, label: str) -> str:

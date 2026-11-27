@@ -254,6 +254,23 @@ class PathNamingConventionTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.storage._path_for(language, intent)
 
+    def test_root_symlink_rejects_reads_and_writes_without_touching_target(self) -> None:
+        outside = Path(self._tmp.name) / "outside"
+        outside.mkdir()
+        sentinel = outside / "foreign.yaml"
+        sentinel.write_text("keep: unchanged\n", encoding="utf-8")
+        root = Path(self._tmp.name) / CUSTOM_SENTENCES_DIR_NAME
+        root.symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaises(ValueError):
+            self.storage._list_all_sync(None)
+        with self.assertRaises(ValueError):
+            self.storage._create_sync(
+                "en", "HassTurnOn", ["turn on"], {}, "", "en:HassTurnOn:12345678"
+            )
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep: unchanged\n")
+        self.assertEqual(list(outside.iterdir()), [sentinel])
+
     def test_path_for_rejects_language_symlink_outside_root(self) -> None:
         root = os.path.join(self._tmp.name, CUSTOM_SENTENCES_DIR_NAME)
         outside = os.path.join(self._tmp.name, "outside")
