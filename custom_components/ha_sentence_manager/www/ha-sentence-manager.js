@@ -969,6 +969,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,s
 }
 .tabs { flex-wrap:nowrap !important;overflow-x:auto !important;min-width:0;max-width:100%; }
 .tabs button[data-tab] { flex:1 0 auto !important;min-width:44px !important;min-height:44px !important;white-space:nowrap !important;overflow-wrap:normal;word-break:normal;max-width:none; }
+.tabs button[data-tab]:focus-visible { outline-offset:-3px; }
 .ht-tab-picker { display:none;min-width:0;gap:6px;margin:0 0 16px; }
 .ht-tab-picker select { width:100%;font:inherit;color:var(--primary-text-color,inherit);background:var(--card-background-color,transparent);padding:8px;border:1px solid var(--divider-color,#aaa);border-radius:8px; }
 .tabs[hidden],.ht-tab-picker[hidden] { display:none !important; }
@@ -2946,6 +2947,14 @@ class HASentenceManager extends HTMLElement {
     this.shadowRoot.querySelectorAll('.tab-btn').forEach(btn => {
       if (btn.dataset.sentenceTabBound) return;
       btn.dataset.sentenceTabBound = '1';
+      btn.addEventListener('focus', () => {
+        const nav = btn.parentElement;
+        const { left, right } = btn.getBoundingClientRect();
+        const navLeft = nav.getBoundingClientRect().left + nav.clientLeft;
+        const navRight = navLeft + nav.clientWidth;
+        if (left < navLeft) nav.scrollLeft += left - navLeft;
+        else if (right > navRight) nav.scrollLeft += right - navRight;
+      });
       btn.addEventListener('click', e => {
         this.currentTab = btn.dataset.tab;
         history.replaceState(null, '', location.pathname + '#' + this._toolId + '/' + this.currentTab);

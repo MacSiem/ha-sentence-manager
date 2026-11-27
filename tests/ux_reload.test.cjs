@@ -4,3 +4,30 @@ test('known intents have localized names and stable IDs, unknown values remain e
 test('help starts collapsed and can be opened',()=>{const {dom,card}=fixture();try{const tip=card.shadowRoot.querySelector('#tip-banner');assert.equal(tip.tagName,'DETAILS');assert.equal(tip.open,false);assert.ok(tip.querySelector('summary'));tip.open=true;assert.equal(tip.open,true)}finally{dom.window.close()}});
 for(const action of ['save','delete'])for(const reload of [true,false])test(`${action}: persisted result and reload ${reload?'completed':'unconfirmed'}`,async()=>{const {dom,card}=fixture();try{const notices=[];card.showNotification=(...x)=>notices.push(x);card._reloadFromApi=async()=>{};card._apiReload=async()=>reload;if(action==='save'){card.shadowRoot.querySelector('#trigger-input').value='x';card.shadowRoot.querySelector('#intent-input').value='X';card._apiCreate=async()=>({ok:true});await card.saveSentence()}else{card.sentences=[{id:'1',revision:'r'}];dom.window.confirm=()=>true;card._apiDelete=async()=>({ok:true});await card.deleteSentence('1')}assert.match(notices.at(-1)[0],action==='save'?/saved/i:/deleted/i);assert.match(notices.at(-1)[0],reload?/reload.*completed/i:/reload.*(failed|unconfirmed)/i);assert.equal(notices.at(-1)[1],reload?'success':'error')}finally{dom.window.close()}});
 test('HA intent label keeps stable expansion key and escapes unknown IDs',()=>{const {dom,card}=fixture('pl');try{card._haSentences={intents:{HassLightSet:['x'],'<unknown>':['y']},lists:{}};card.currentTab='ha-sentences';card.render();const headers=[...card.shadowRoot.querySelectorAll('[data-toggle-intent]')];assert.equal(headers[0].dataset.toggleIntent,'HassLightSet');assert.match(headers[0].textContent,/Światło: ustaw \(HassLightSet\)/);assert.equal(headers[1].dataset.toggleIntent,'<unknown>');assert.equal(headers[1].querySelector('.intent-name').textContent,'<unknown>');headers[0].click();assert.equal(headers[0].getAttribute('aria-expanded'),'false')}finally{dom.window.close()}});
+
+test('focused tabs scroll fully into the card navigation in both directions', () => {
+  const {dom, card} = fixture();
+  try {
+    const nav = card.shadowRoot.querySelector('.tabs');
+    const tabs = nav.querySelectorAll('button[data-tab]');
+    const first = tabs[0];
+    const middle = tabs[2];
+    const last = tabs[tabs.length - 1];
+    nav.getBoundingClientRect = () => ({left: 23});
+    Object.defineProperty(nav, 'clientWidth', {value: 274});
+    first.getBoundingClientRect = () => ({left: -6, right: 80});
+    middle.getBoundingClientRect = () => ({left: 60, right: 140});
+    last.getBoundingClientRect = () => ({left: 220, right: 329});
+    const focus = button => button.dispatchEvent(new dom.window.FocusEvent('focus'));
+
+    nav.scrollLeft = 228;
+    focus(last);
+    assert.equal(nav.scrollLeft, 260);
+    focus(middle);
+    assert.equal(nav.scrollLeft, 260);
+    focus(first);
+    assert.equal(nav.scrollLeft, 231);
+  } finally {
+    dom.window.close();
+  }
+});
