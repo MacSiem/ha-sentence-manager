@@ -967,7 +967,7 @@ input:not([type=checkbox]):not([type=radio]),select,textarea { min-width:44px !i
 button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible {
   outline:3px solid var(--primary-color,#1769aa) !important;outline-offset:2px;
 }
-.tabs { flex-wrap:wrap !important;overflow:visible !important;min-width:0;max-width:100%; }
+.tabs { flex-wrap:nowrap !important;overflow-x:auto !important;min-width:0;max-width:100%; }
 .tabs button[data-tab] { min-width:44px !important;min-height:44px !important;white-space:normal !important;overflow-wrap:anywhere;max-width:100%; }
 .ht-tab-picker { display:none;min-width:0;gap:6px;margin:0 0 16px; }
 .ht-tab-picker select { width:100%;font:inherit;color:var(--primary-text-color,inherit);background:var(--card-background-color,transparent);padding:8px;border:1px solid var(--divider-color,#aaa);border-radius:8px; }
@@ -982,6 +982,18 @@ button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,s
 :host([data-responsive-tabs-observed]) .tabs:not([hidden]) { display:flex !important; }
 :host([data-responsive-tabs-observed]) .ht-tab-picker:not([hidden]) { display:flex;flex-direction:column; }
 `;
+
+function _friendlyIntent(name, lang) {
+  name = String(name ?? "");
+  const labels = {
+    HassLightSet: ['Światło: ustaw', 'Light: set'],
+    HassTurnOn: ['Urządzenie: włącz', 'Device: turn on'],
+    HassTurnOff: ['Urządzenie: wyłącz', 'Device: turn off'],
+    HassClimateSetTemperature: ['Temperatura: ustaw', 'Temperature: set'],
+  };
+  const label = Object.hasOwn(labels, name) ? labels[name][lang === 'pl' ? 0 : 1] : null;
+  return label ? `${label} (${name})` : name;
+}
 
 class HASentenceManager extends HTMLElement {
   constructor() {
@@ -2171,9 +2183,12 @@ class HASentenceManager extends HTMLElement {
       await this._reloadFromApi({ preserveDrafts: true });
     }
     if (epoch !== this._dataEpoch) return;
-    await this._apiReload();
+    const reloaded = await this._apiReload();
     if (epoch !== this._dataEpoch) return;
-    this.showNotification(this._lang === 'pl' ? 'Zdanie zapisane' : 'Sentence saved', 'success');
+    this.showNotification(this._lang === 'pl'
+      ? (reloaded ? 'Zdanie zapisane. Żądanie przeładowania HA zakończone.' : 'Zdanie zapisane, ale przeładowanie HA nie powiodło się.')
+      : (reloaded ? 'Sentence saved. HA reload request completed.' : 'Sentence saved, but HA reload failed.'),
+      reloaded ? 'success' : 'error');
   }
 
   clearForm() {
@@ -2249,9 +2264,12 @@ class HASentenceManager extends HTMLElement {
     if (epoch !== this._dataEpoch) return;
     await this._reloadFromApi();
     if (epoch !== this._dataEpoch) return;
-    await this._apiReload();
+    const reloaded = await this._apiReload();
     if (epoch !== this._dataEpoch) return;
-    this.showNotification(this._lang === 'pl' ? 'Zdanie usunięte' : 'Sentence deleted', 'success');
+    this.showNotification(this._lang === 'pl'
+      ? (reloaded ? 'Zdanie usunięte. Żądanie przeładowania HA zakończone.' : 'Zdanie usunięte, ale przeładowanie HA nie powiodło się.')
+      : (reloaded ? 'Sentence deleted. HA reload request completed.' : 'Sentence deleted, but HA reload failed.'),
+      reloaded ? 'success' : 'error');
   }
 
   addSlotToForm() {
@@ -2317,10 +2335,6 @@ class HASentenceManager extends HTMLElement {
       case 'actions': activeTabContent = this._renderActionsTab(); break;
     }
 
-    const tipDismissed = (() => {
-      try { return localStorage.getItem('ha-tools-sentence-manager-tips-v3.0.0') === 'dismissed'; } catch(e) { return false; }
-    })();
-
     const container = document.createElement('div');
     container.className = 'card';
     container.innerHTML = `
@@ -2328,9 +2342,8 @@ class HASentenceManager extends HTMLElement {
         <h1 class="card-title">${_esc(this.config.title) || 'Sentence Manager'}</h1>
       </div>
 
-      <div class="tip-banner ${tipDismissed ? 'hidden' : ''}" id="tip-banner">
-        <button class="tip-dismiss" id="tip-dismiss" aria-label="${this._lang === 'pl' ? 'Ukryj wskazówki' : 'Dismiss tips'}">\u2715</button>
-        <div class="tip-banner-title">💡 ${this._lang === 'pl' ? 'Jak działają komendy głosowe?' : 'How do voice commands work?'}</div>
+      <details class="tip-banner" id="tip-banner" ${this._tipsOpen ? 'open' : ''}>
+        <summary class="tip-banner-title">💡 ${this._lang === 'pl' ? 'Jak działają komendy głosowe?' : 'How do voice commands work?'}</summary>
         <ul>
           <li><strong>${this._lang === 'pl' ? 'Edytor' : 'Editor'}</strong> — ${this._lang === 'pl' ? 'tworzysz zdania (sentences), które HA rozpoznaje jako komendy głosowe.' : 'you create sentences that HA recognizes as voice commands.'}</li>
           <li><strong>${this._lang === 'pl' ? 'Składnia:' : 'Syntax:'}</strong> ${this._lang === 'pl' ? 'użyj <code>[opcja1|opcja2]</code> dla alternatyw, <code>{slot_name}</code> dla zmiennych.' : 'use <code>[option1|option2]</code> for alternatives, <code>{slot_name}</code> for variables.'}</li>
@@ -2339,7 +2352,7 @@ class HASentenceManager extends HTMLElement {
           <li><strong>${this._lang === 'pl' ? 'Import/Eksport' : 'Import/Export'}</strong> — ${this._lang === 'pl' ? 'eksportuj do YAML, importuj wklejony YAML.' : 'export to YAML, import pasted YAML.'}</li>
           <li><strong>${this._lang === 'pl' ? 'Przykład:' : 'Example:'}</strong> <code>${this._lang === 'pl' ? '[włącz|zapal] [światło|lampę]' : '[turn on|light] [light|lamp]'} ${this._lang === 'pl' ? 'w' : 'in'} {room}</code></li>
         </ul>
-      </div>
+      </details>
 
       <div class="tabs">
         <button class="tab-btn ${this.currentTab === 'ha-sentences' ? 'active' : ''}" aria-pressed="${this.currentTab === 'ha-sentences'}" data-tab="ha-sentences">\u{1F3E0} ${this._lang === 'pl' ? 'Zdania HA' : 'HA Sentences'}</button>
@@ -2444,7 +2457,7 @@ class HASentenceManager extends HTMLElement {
               ${catIntents.map(([name, sentences]) => `
                 <div class="intent-group">
                   <button type="button" class="intent-header" aria-expanded="true" style="cursor:pointer;width:100%;text-align:start;" data-toggle-intent="${_esc(name)}">
-                    <span class="intent-name">${_esc(name)}</span>
+                    <span class="intent-name">${_esc(_friendlyIntent(name, this._lang))}</span>
                     <span class="badge badge-info">${sentences.length} ${this._lang === 'pl' ? 'zdań' : 'sentences'}</span>
                     <span class="toggle-arrow" style="margin-left:auto;font-size:12px;color:var(--bento-text-muted);">\u25BC</span>
                   </button>
@@ -2723,7 +2736,7 @@ class HASentenceManager extends HTMLElement {
             ${this.sentences.length === 0 && !this._apiError ? `<p class="empty-state">${emptyMessage}</p>` : ''}
             ${grouped.map(group => `
               <div class="sentence-group">
-                <h3 class="group-header">${_esc(group.intent)}</h3>
+                <h3 class="group-header">${_esc(_friendlyIntent(group.intent, this._lang))}</h3>
                 ${group.sentences.map((s, idx) => `
                   <div class="sentence-item">
                     <div class="sentence-content">
@@ -2903,22 +2916,9 @@ class HASentenceManager extends HTMLElement {
       try { localStorage.setItem('ha-sentence-manager-support-dismissed', '1'); } catch (_) {}
       this.render();
     });
-    // Tip banner dismiss
-    const _tipB = this.shadowRoot.querySelector('#tip-banner');
-    if (_tipB) {
-      const _tipV = 'ha-tools-sentence-manager-tips-v3.0.0';
-      if (localStorage.getItem(_tipV) === 'dismissed') {
-        _tipB.classList.add('hidden');
-      }
-      const _tipDismiss = this.shadowRoot.querySelector('#tip-dismiss');
-      if (_tipDismiss) {
-        _tipDismiss.addEventListener('click', (e) => {
-          e.stopPropagation();
-          _tipB.classList.add('hidden');
-          localStorage.setItem(_tipV, 'dismissed');
-        });
-      }
-    }
+    this.shadowRoot.querySelector('#tip-banner')?.addEventListener('toggle', event => {
+      this._tipsOpen = event.currentTarget.open;
+    });
     const retry = this.shadowRoot.querySelector('#retry-sentences-btn');
     if (retry && !retry.dataset.sentenceRetryBound) {
       retry.dataset.sentenceRetryBound = '1';
